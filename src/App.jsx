@@ -1,16 +1,24 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { supabase } from './supabase/client.js';
+import { useAuth } from './auth/session.jsx';
+import RequireOfficer, { RequireAdmin } from './auth/guards.jsx';
+import CitizenAuth from './auth/AuthScreens.jsx';
+import OfficerLogin from './auth/OfficerLogin.jsx';
+import EmptyState from './components/EmptyState.jsx';
 import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
   Bell,
+  Building2,
   CheckCircle2,
   ChevronRight,
   Clock,
   Droplets,
   FileText,
   Filter,
+  Flame,
   Home,
   ImageOff,
   Inbox,
@@ -34,15 +42,28 @@ import {
 import './App.css';
 import LocationPicker from './location/LocationPicker.jsx';
 import IssueCityMap from './location/IssueCityMap.jsx';
+import WardSelector from './components/WardSelector.jsx';
+import WardHeatmap from './components/WardHeatmap.jsx';
+import PublicWardMap from './components/PublicWardMap.jsx';
+import WardPerformance from './components/WardPerformance.jsx';
+import WardComparison from './components/WardComparison.jsx';
+import AdminLocations from './components/AdminLocations.jsx';
+import TicketTimeline from './components/TicketTimeline.jsx';
+import Satisfaction from './components/Satisfaction.jsx';
+import { matchRoute, pathForTab, OFFICER_TABS } from './routes.js';
+import { recommendOfficer } from './officers.js';
+import { wardStats, maintenanceAlerts } from './analytics/wardAnalytics.js';
 import { CITY } from './location/chennaiPlaces.js';
 import {
   buildLocation,
+  locationHierarchy,
   locationLine,
   ticketLocation,
   reverseGeocode,
   getBrowserLocation,
 } from './location/locationService.js';
 import {
+  applyCitizenFeedback,
   buildEscalationTimeline,
   calculatePriorityScore,
   citizenUpdateCopy,
@@ -58,18 +79,12 @@ import {
   notificationForEvent,
   priorityBand,
   saveSettings,
+  seedTimeline,
   slaMeta,
   sortOfficerQueue,
   ticketPayload,
+  timelineEvent,
 } from './civicEngine.js';
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-
-const supabase = createClient(
-  SUPABASE_URL || 'https://placeholder.supabase.co',
-  SUPABASE_PUBLISHABLE_KEY || 'placeholder-key'
-);
 
 const STATUSES = ['Open', 'Under Review', 'Assigned', 'In Progress', 'Resolved'];
 const STATUS_LABEL = {
@@ -201,17 +216,6 @@ function TicketThumb({ src, alt = '' }) {
   );
 }
 
-function EmptyState({ title, body, action }) {
-  return (
-    <div className="empty-state">
-      <Inbox className="w-8 h-8 mx-auto mb-2 text-slate-400" />
-      <p className="font-semibold text-slate-700">{title}</p>
-      <p className="text-sm mt-1">{body}</p>
-      {action}
-    </div>
-  );
-}
-
 const seedLoc = (lat, lon, extra = {}) => buildLocation({ latitude: lat, longitude: lon, extra });
 
 const SEED = [
@@ -288,9 +292,71 @@ const SEED = [
   },
 ];
 
+function AccountMenu({ user, profile, isOfficer, isAdmin, open, onToggle, onClose, onNavigate, onSignOut, dark }) {
+  if (!user) {
+    return (
+      <button type="button" className={dark ? 'signin-chip' : 'ghost-btn'} onClick={() => onNavigate('login')}>
+        Sign in
+      </button>
+    );
+  }
+  const name = profile?.full_name || user.email || 'Citizen';
+  const initials =
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase() || 'C';
+  const roleLabel = isAdmin ? 'Administrator' : isOfficer ? 'Municipal officer' : 'Citizen account';
+  return (
+    <div className="account-wrap">
+      <button
+        type="button"
+        className={`avatar ${dark ? 'on-dark' : ''}`}
+        onClick={onToggle}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Account menu"
+      >
+        {initials}
+      </button>
+      {open && (
+        <>
+          <button type="button" className="account-backdrop" aria-hidden="true" tabIndex={-1} onClick={onClose} />
+          <div className="account-pop" role="menu" aria-label="Account">
+            <div className="account-head">
+              <strong>{name}</strong>
+              <span>{user.email}</span>
+              <span className="account-role">{roleLabel}</span>
+            </div>
+            <button type="button" className="account-item" role="menuitem" onClick={() => onNavigate('reports')}>
+              My Complaints
+            </button>
+            {isOfficer && (
+              <button type="button" className="account-item" role="menuitem" onClick={() => onNavigate('dashboard')}>
+                Officer Dashboard
+              </button>
+            )}
+            <button type="button" className="account-item" role="menuitem" onClick={onSignOut}>
+              Sign out
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [civicSettings, setCivicSettings] = useState(() => loadSettings());
-  const [activeTab, setActiveTab] = useState('home');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const route = useMemo(() => matchRoute(location.pathname), [location.pathname]);
+  const activeTab = route.tab;
+  const { user, profile, officerProfile, isOfficer, isAdmin, signOut } = useAuth();
+  const officerArea = OFFICER_TABS.includes(activeTab) || activeTab === 'detail';
   const [tickets, setTickets] = useState(() => SEED.map((t) => applyTicketLocation(t, loadSettings())));
   const [formData, setFormData] = useState({
     description: '',
@@ -329,19 +395,27 @@ export default function App() {
   const [pendingDuplicate, setPendingDuplicate] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [userNotifications, setUserNotifications] = useState([]);
+  const [accountOpen, setAccountOpen] = useState(false);
   const fileRef = useRef(null);
 
   const pushAlert = (evt) => {
     setAlerts((prev) => [{ id: `${Date.now()}-${evt.type}`, at: new Date().toISOString(), ...evt }, ...prev].slice(0, 20));
   };
 
-  const fetchTickets = async () => {
+  const fetchTickets = useCallback(async () => {
     try {
-      const { data, error } = await withTimeout(
-        supabase.from('tickets').select('*').order('priority_score', { ascending: false })
+      const [publicRes, scopedRes] = await withTimeout(
+        Promise.all([
+          supabase.from('public_issues').select('*').order('priority_score', { ascending: false }),
+          supabase.from('tickets').select('*').order('priority_score', { ascending: false }),
+        ])
       );
 
-      if (error) {
+      const publicRows = publicRes?.error ? [] : publicRes?.data || [];
+      const scopedRows = scopedRes?.error ? [] : scopedRes?.data || [];
+
+      if (publicRes?.error && scopedRes?.error) {
         setSyncState({
           ok: false,
           message: 'Could not sync with the dispatch server. Local queue is still available.',
@@ -349,8 +423,18 @@ export default function App() {
         return;
       }
 
-      if (data && data.length > 0) {
-        setTickets(data.map((row) => applyTicketLocation(row, civicSettings)));
+      // Officers work only from their ward-scoped rows; the database policies
+      // decide what the scoped query returns. Citizens and guests also get the
+      // public city feed (non-personal columns) for the ward map and tracker.
+      const rows = new Map();
+      if (!isOfficer) {
+        publicRows.forEach((row) => rows.set(row.id, row));
+      }
+      scopedRows.forEach((row) => rows.set(row.id, { ...(rows.get(row.id) || {}), ...row }));
+      const list = [...rows.values()];
+
+      if (list.length > 0) {
+        setTickets(list.map((row) => applyTicketLocation(row, civicSettings)));
       }
 
       setSyncState({ ok: true, message: null });
@@ -362,11 +446,74 @@ export default function App() {
     } finally {
       setHydrating(false);
     }
-  };
+  }, [isOfficer, civicSettings]);
 
   useEffect(() => {
     fetchTickets();
-  }, []);
+  }, [fetchTickets, user?.id]);
+
+  // Complaint updates for the signed-in account. Row Level Security returns
+  // only the caller's own notifications, so no citizen data crosses accounts.
+  const fetchNotifications = useCallback(async () => {
+    if (!user) {
+      setUserNotifications([]);
+      return;
+    }
+    try {
+      const { data, error } = await withTimeout(
+        supabase
+          .from('notifications')
+          .select('id, ticket_id, kind, title, body, created_at, read_at')
+          .order('created_at', { ascending: false })
+          .limit(20)
+      );
+      if (!error && data) setUserNotifications(data);
+    } catch {
+      // Offline — the list re-syncs next time the drawer opens.
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
+
+  // Server-side overdue sweep (migration 004). Officers and administrators may
+  // run it; the database scopes it to the caller's ward and is the only place
+  // sla_status = 'overdue' is persisted.
+  const runOverdueCheck = useCallback(async () => {
+    if (!isOfficer) return;
+    try {
+      await withTimeout(supabase.rpc('mark_overdue_tickets'), 4000);
+    } catch {
+      // Offline — the sweep runs again when the dispatch server is reachable.
+    }
+  }, [isOfficer]);
+
+  useEffect(() => {
+    if (activeTab === 'dashboard' && isOfficer) {
+      runOverdueCheck()
+        .then(fetchTickets)
+        .then(fetchNotifications);
+    }
+  }, [activeTab, isOfficer, runOverdueCheck, fetchTickets, fetchNotifications]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (route.tab !== 'tracker' || !route.param) return;
+    const q = route.param.trim().toLowerCase();
+    const found = tickets.find(
+      (t) => t.id.toLowerCase() === q || String(t.ticket_id || '').toLowerCase() === q
+    );
+    setSearchId(route.param);
+    setTrackedTicket(found || 'NOT_FOUND');
+  }, [route.tab, route.param, tickets]);
+
+  useEffect(() => {
+    if (route.tab === 'detail' && route.param) setSelectedId(route.param);
+  }, [route.tab, route.param]);
 
   useEffect(() => {
     if (!notification) return undefined;
@@ -392,7 +539,7 @@ export default function App() {
       category: 'Road / Pothole',
     }));
     setReportStep(2);
-    setActiveTab('report');
+    navigate(pathForTab('report'));
   };
 
   const useCurrentLocation = async () => {
@@ -447,6 +594,7 @@ export default function App() {
       report_count: 1,
       status: 'Open',
       category,
+      user_id: user?.id || null,
       created_at,
       updated_at: created_at,
       latest_reported_at: created_at,
@@ -454,34 +602,13 @@ export default function App() {
       ...loc,
       ward_id: formData.ward_id || loc.ward_id,
     };
-    return applyTicketLocation(draft, civicSettings);
+    const enriched = applyTicketLocation(draft, civicSettings);
+    return { ...enriched, timeline: seedTimeline(enriched) };
   };
 
   const supportExisting = async (existing) => {
     setLoading(true);
     const now = new Date().toISOString();
-    const report_count = (existing.report_count || existing.priority_score || 1) + 1;
-    const sla = computeDeadlines({ ...existing, report_count }, civicSettings);
-    const updated = applyTicketLocation(
-      {
-        ...existing,
-        report_count,
-        latest_reported_at: now,
-        updated_at: now,
-        sla_status: sla.sla_status,
-        escalation_level: sla.escalation_level,
-        priority_score: calculatePriorityScore({
-          reportCount: report_count,
-          category: existing.category,
-          description: existing.description,
-          createdAt: existing.created_at,
-          slaStatus: sla.sla_status,
-          status: existing.status,
-        }),
-      },
-      civicSettings
-    );
-
     const submission = {
       ticket_id: existing.id,
       description: formData.description,
@@ -492,14 +619,74 @@ export default function App() {
       created_at: now,
     };
 
-    await persistTicket(updated);
-    await persistSubmission(submission);
+    // Merging happens server-side (support_complaint RPC) so the report count
+    // and priority stay server-controlled. Offline, the local merge below
+    // keeps the demo fully functional.
+    let serverRow = null;
+    try {
+      const { data, error } = await withTimeout(
+        supabase.rpc('support_complaint', {
+          p_ticket_id: existing.id,
+          p_description: submission.description,
+          p_image_url: submission.image_url,
+          p_latitude: submission.latitude,
+          p_longitude: submission.longitude,
+          p_category: submission.category,
+        })
+      );
+      if (!error && data) serverRow = Array.isArray(data) ? data[0] : data;
+    } catch {
+      /* offline — fall back to the local merge */
+    }
+
+    let updated;
+    if (serverRow && serverRow.id) {
+      updated = applyTicketLocation({ ...existing, ...serverRow, id: existing.id }, civicSettings);
+    } else {
+      const report_count = (existing.report_count || existing.priority_score || 1) + 1;
+      const sla = computeDeadlines({ ...existing, report_count }, civicSettings);
+      updated = applyTicketLocation(
+        {
+          ...existing,
+          report_count,
+          latest_reported_at: now,
+          updated_at: now,
+          sla_status: sla.sla_status,
+          escalation_level: sla.escalation_level,
+          timeline: [
+            ...(Array.isArray(existing.timeline) ? existing.timeline : []),
+            timelineEvent(
+              'duplicate_check',
+              'Another citizen reported the same problem at this location — merged into this ticket (ONE problem = ONE ticket).',
+              now
+            ),
+          ],
+          priority_score: calculatePriorityScore({
+            reportCount: report_count,
+            category: existing.category,
+            description: existing.description,
+            createdAt: existing.created_at,
+            slaStatus: sla.sla_status,
+            status: existing.status,
+          }),
+        },
+        civicSettings
+      );
+      await persistTicket(updated);
+      await persistSubmission(submission);
+    }
+
     setSubmissions((prev) => [submission, ...prev]);
     setTickets((prev) => prev.map((t) => (t.id === existing.id ? updated : t)));
     setSubmittedTicket({ ...updated, duplicate: true });
     const note = notificationForEvent('supported', updated);
     setNotification(note);
     pushAlert(note);
+    const mergedCount = updated.report_count || updated.priority_score || 1;
+    if ([3, 6, 11].includes(mergedCount)) pushAlert(notificationForEvent('surge', updated));
+    if (updated.priority_score >= 4 && (existing.priority_score || 0) < 4) {
+      pushAlert(notificationForEvent('critical', updated));
+    }
     setPendingDuplicate(null);
     setReportStep(5);
     setLoading(false);
@@ -556,11 +743,12 @@ export default function App() {
         longitude: lon,
         category: formData.category || inferCategory(formData.description),
         description: formData.description,
+        place_id: formData.place_id,
+        ward_id: formData.ward_id,
       },
       civicSettings,
       calculateDistanceInMeters
     );
-
     if (match) {
       setPendingDuplicate({
         ...match.ticket,
@@ -598,11 +786,39 @@ export default function App() {
     };
 
     if (newStatus === 'Assigned' || newStatus === 'In Progress') {
-      patch.assigned_officer = current.assigned_officer || 'Ward Field Unit';
-      patch.latest_update = 'Your issue has been assigned to the maintenance team.';
-    }
-    if (newStatus === 'In Progress') {
-      patch.latest_update = 'Maintenance team assigned.';
+      if (!current.assigned_officer) {
+        const rec = recommendOfficer(
+          tickets.filter((t) => t.id !== ticketId),
+          {
+            ward_id: current.ward_id,
+            category: current.category || inferCategory(current.description),
+            latitude: Number(current.latitude),
+            longitude: Number(current.longitude),
+          }
+        );
+        if (rec.officer) {
+          patch.assigned_officer = rec.officer.name;
+          patch.assigned_officer_id = rec.officer.officer_id;
+          patch.officer_name = rec.officer.name;
+          patch.department = rec.officer.department;
+          patch.officer_reason = rec.reason;
+        }
+      }
+      patch.assigned_officer = patch.assigned_officer || 'Ward Field Unit';
+      patch.latest_update =
+        newStatus === 'Assigned'
+          ? `Your issue has been assigned to ${patch.assigned_officer}.`
+          : 'Maintenance team started work on this issue.';
+      patch.timeline = [
+        ...(Array.isArray(current.timeline) ? current.timeline : []),
+        timelineEvent(
+          newStatus === 'Assigned' ? 'officer_assigned' : 'repair_started',
+          newStatus === 'Assigned'
+            ? `Assigned to ${patch.assigned_officer}${patch.department ? ` (${patch.department})` : ''}.`
+            : 'Field crew started work on this issue.',
+          now
+        ),
+      ];
     }
     if (newStatus === 'Resolved') {
       patch.resolved_at = now;
@@ -610,6 +826,10 @@ export default function App() {
       patch.after_photo_url = afterPhoto;
       patch.latest_update = resolutionNote.trim();
       patch.sla_status = 'resolved';
+      patch.timeline = [
+        ...(Array.isArray(current.timeline) ? current.timeline : []),
+        timelineEvent('resolution_submitted', resolutionNote.trim(), now),
+      ];
     }
 
     const next = applyTicketLocation(patch, civicSettings);
@@ -626,6 +846,7 @@ export default function App() {
     setTickets((prev) => prev.map((t) => (t.id === ticketId ? next : t)));
 
     if (newStatus === 'Assigned') pushAlert(notificationForEvent('assigned', next));
+    if (newStatus === 'In Progress') pushAlert(notificationForEvent('responded', next));
     if (newStatus === 'Resolved') {
       const note = notificationForEvent('resolved', next);
       setNotification(note);
@@ -633,18 +854,77 @@ export default function App() {
     }
   };
 
+  /** Spec §26 — citizen 👍/👎 verification. 👎 reopens the ticket. */
+  const handleFeedback = async (ticketId, feedback) => {
+    const current = tickets.find((t) => t.id === ticketId);
+    if (!current) return;
+    const now = new Date().toISOString();
+    const patch = applyCitizenFeedback(current, feedback);
+    const next = applyTicketLocation(
+      { ...current, ...patch, updated_at: now, status: patch.status || current.status },
+      civicSettings
+    );
+    try {
+      await withTimeout(supabase.from('tickets').update(ticketPayload(next)).eq('id', ticketId));
+    } catch {
+      /* keep local update */
+    }
+    setTickets((prev) => prev.map((t) => (t.id === ticketId ? next : t)));
+    if (next.satisfaction === 'up') {
+      const note = {
+        type: 'success',
+        title: `✅ ${next.ward_id ? `${next.ward_id} — ` : ''}Issue Closed`,
+        message: `Ticket ${displayTicketId(next)} closed after positive citizen verification.`,
+        tone: 'ok',
+      };
+      setNotification(note);
+      pushAlert(note);
+    } else {
+      const note = notificationForEvent('reopened', next);
+      setNotification(note);
+      pushAlert(note);
+    }
+  };
+
   const handleSearch = (e) => {
     e.preventDefault();
-    const q = searchId.trim().toLowerCase();
-    const found = tickets.find(
-      (t) => t.id.toLowerCase() === q || String(t.ticket_id || '').toLowerCase() === q
-    );
-    setTrackedTicket(found || 'NOT_FOUND');
+    const q = searchId.trim();
+    if (!q) return;
+    navigate(pathForTab('tracker', q));
   };
 
   const openTicket = (id) => {
     setSelectedId(id);
-    setActiveTab('detail');
+    navigate(pathForTab('detail', id));
+  };
+
+  const openTracker = (id) => {
+    navigate(pathForTab('tracker', id));
+  };
+
+  const handleSignOut = async () => {
+    setAccountOpen(false);
+    await signOut();
+    navigate(pathForTab('home'));
+  };
+
+  const unreadCount = userNotifications.filter((n) => !n.read_at).length;
+
+  const markNotificationsRead = async () => {
+    const unreadIds = userNotifications.filter((n) => !n.read_at).map((n) => n.id);
+    if (unreadIds.length === 0) return;
+    const readAt = new Date().toISOString();
+    setUserNotifications((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: readAt })));
+    try {
+      await withTimeout(supabase.from('notifications').update({ read_at: readAt }).in('id', unreadIds));
+    } catch {
+      // Offline — the badge re-syncs the next time the drawer opens.
+    }
+  };
+
+  const toggleNotifyDrawer = () => {
+    if (!notifyOpen) fetchNotifications();
+    setNotifyOpen((v) => !v);
   };
 
   const stats = useMemo(() => {
@@ -699,6 +979,7 @@ export default function App() {
 
   const myReports = useMemo(() => {
     let list = [...searchedTickets];
+    if (user) list = list.filter((t) => t.user_id === user.id);
     if (reportFilter === 'Open') list = list.filter((t) => t.status === 'Open' || t.status === 'Under Review');
     if (reportFilter === 'In Progress') {
       list = list.filter((t) => t.status === 'In Progress' || t.status === 'Assigned');
@@ -708,7 +989,7 @@ export default function App() {
     if (reportSort === 'oldest') list.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     if (reportSort === 'priority') list.sort((a, b) => b.priority_score - a.priority_score);
     return list;
-  }, [searchedTickets, reportFilter, reportSort]);
+  }, [searchedTickets, reportFilter, reportSort, user]);
 
   const officerList = useMemo(() => {
     return sortedTickets.filter((t) => {
@@ -741,19 +1022,36 @@ export default function App() {
     }, {})
   );
 
+  const tracked = useMemo(() => {
+    if (!trackedTicket || trackedTicket === 'NOT_FOUND') return trackedTicket;
+    return tickets.find((t) => t.id === trackedTicket.id) || trackedTicket;
+  }, [trackedTicket, tickets]);
+
+  // Analytics helpers only treat lowercase 'all' as "no ward filter".
+  const scopeWard = officerFilter.ward === 'All' ? 'all' : officerFilter.ward;
+
+  const wardSnapshot = useMemo(() => wardStats(tickets, scopeWard), [tickets, scopeWard]);
+
+  const maintAlerts = useMemo(() => maintenanceAlerts(tickets, scopeWard), [tickets, scopeWard]);
+
   const nav = [
     { id: 'home', label: 'Citizen Portal', icon: Home, group: 'Citizen' },
     { id: 'report', label: 'Report Issue', icon: FileText, group: 'Citizen' },
     { id: 'reports', label: 'My Reports', icon: Inbox, group: 'Citizen' },
     { id: 'tracker', label: 'Status Tracker', icon: Radio, group: 'Citizen' },
+    { id: 'wardmap', label: 'Ward Map', icon: Layers, group: 'Citizen' },
     { id: 'dashboard', label: 'Officer Dashboard', icon: LayoutDashboard, group: 'Operations' },
+    { id: 'heatmap', label: 'Issue Heatmap', icon: Flame, group: 'Operations' },
+    { id: 'performance', label: 'Ward Performance', icon: TrendingUp, group: 'Operations' },
+    { id: 'comparison', label: 'Ward Comparison', icon: BarChart3, group: 'Operations' },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, group: 'Operations' },
+    { id: 'admin', label: 'Wards & Locations', icon: Building2, group: 'System' },
     { id: 'settings', label: 'Settings', icon: Settings, group: 'System' },
   ];
 
   const go = (id) => {
-    setActiveTab(id);
     if (id === 'report' && reportStep === 5) setReportStep(1);
+    navigate(pathForTab(id));
   };
 
   const onFiles = (files) => {
@@ -786,14 +1084,16 @@ export default function App() {
         </div>
 
         <nav className="sidebar-nav" aria-label="Primary">
-          {['Citizen', 'Operations', 'System'].map((group) => (
+          {['Citizen', 'Operations', 'System']
+            .filter((group) => group === 'Citizen' || isOfficer)
+            .map((group) => (
             <div key={group}>
               <div className="nav-section">{group}</div>
               {nav
                 .filter((item) => item.group === group)
                 .map((item) => {
                   const Icon = item.icon;
-                  const active = activeTab === item.id || (item.id === 'reports' && activeTab === 'detail');
+                  const active = activeTab === item.id || (item.id === 'dashboard' && activeTab === 'detail');
                   return (
                     <button
                       key={item.id}
@@ -818,9 +1118,27 @@ export default function App() {
           <Layers className="w-4 h-4" />
           <strong>UrbanGrid</strong>
         </div>
-        <button type="button" className="icon-btn" style={{ width: 36, height: 36 }} onClick={() => setNotifyOpen((v) => !v)} aria-label="Notifications">
-          <Bell className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" className="icon-btn" style={{ width: 36, height: 36 }} onClick={toggleNotifyDrawer} aria-label="Notifications">
+            <Bell className="w-4 h-4" />
+            {(notification || unreadCount > 0) && <span className="notif-dot" />}
+          </button>
+          <AccountMenu
+            dark
+            user={user}
+            profile={profile}
+            isOfficer={isOfficer}
+            isAdmin={isAdmin}
+            open={accountOpen}
+            onToggle={() => setAccountOpen((v) => !v)}
+            onClose={() => setAccountOpen(false)}
+            onNavigate={(tabId) => {
+              setAccountOpen(false);
+              go(tabId);
+            }}
+            onSignOut={handleSignOut}
+          />
+        </div>
       </header>
 
       <header className="topbar">
@@ -838,13 +1156,24 @@ export default function App() {
             <MapPin className="w-4 h-4" />
             {formData.area || 'Chennai'}
           </button>
-          <button type="button" className="icon-btn" onClick={() => setNotifyOpen((v) => !v)} aria-label="Notifications">
+          <button type="button" className="icon-btn" onClick={toggleNotifyDrawer} aria-label="Notifications">
             <Bell className="w-4 h-4" />
-            {notification && <span className="notif-dot" />}
+            {(notification || unreadCount > 0) && <span className="notif-dot" />}
           </button>
-          <button type="button" className="avatar" onClick={() => go('settings')} aria-label="Profile">
-            LG
-          </button>
+          <AccountMenu
+            user={user}
+            profile={profile}
+            isOfficer={isOfficer}
+            isAdmin={isAdmin}
+            open={accountOpen}
+            onToggle={() => setAccountOpen((v) => !v)}
+            onClose={() => setAccountOpen(false)}
+            onNavigate={(tabId) => {
+              setAccountOpen(false);
+              go(tabId);
+            }}
+            onSignOut={handleSignOut}
+          />
         </div>
       </header>
 
@@ -864,6 +1193,9 @@ export default function App() {
             <div className="skel" style={{ width: '72%' }} />
           </div>
         )}
+
+        {officerArea && <RequireOfficer />}
+        {activeTab === 'admin' && <RequireAdmin />}
 
         {activeTab === 'home' && (
           <div className="space-y-6">
@@ -944,7 +1276,7 @@ export default function App() {
                     const p = priorityMeta(ticket.priority_score, ticket.status);
                     const idx = stageIndex(ticket.status);
                     return (
-                      <button key={ticket.id} type="button" className="ticket-row" onClick={() => openTicket(ticket.id)}>
+                      <button key={ticket.id} type="button" className="ticket-row" onClick={() => openTracker(ticket.id)}>
                         <TicketThumb src={ticket.image_url} alt="" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
@@ -1066,7 +1398,7 @@ export default function App() {
                       type="button"
                       className="primary-btn"
                       onClick={() => setReportStep(3)}
-                      disabled={!formData.place_name && !formData.latitude}
+                      disabled={!formData.place_name && !formData.ward_id}
                     >
                       Confirm location <ChevronRight className="w-4 h-4" />
                     </button>
@@ -1150,7 +1482,16 @@ export default function App() {
                     <p className="loc-sheet-title">
                       <MapPin className="w-4 h-4" /> {formData.address || `${formData.place_name || 'Selected point'}, Chennai`}
                     </p>
-                    <p className="text-sm mt-1">{formData.ward_id || 'Ward pending'}</p>
+                    <ul className="loc-hierarchy mt-2">
+                      {locationHierarchy(formData)
+                        .filter((row) => row.value && row.value !== '—')
+                        .map((row) => (
+                          <li key={row.key}>
+                            <span>{row.label}</span>
+                            <strong>{row.value}</strong>
+                          </li>
+                        ))}
+                    </ul>
                     <div className="loc-coords">
                       <div>
                         <span>Latitude</span>
@@ -1243,7 +1584,7 @@ export default function App() {
                 ) : (
                   <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
                     {tickets.map((ticket) => (
-                      <button key={ticket.id} type="button" className="ticket-row" onClick={() => openTicket(ticket.id)}>
+                      <button key={ticket.id} type="button" className="ticket-row" onClick={() => openTracker(ticket.id)}>
                         <TicketThumb src={ticket.image_url} alt="" />
                         <div className="flex-1 min-w-0 text-left">
                           <div className="flex items-center justify-between gap-2">
@@ -1296,7 +1637,7 @@ export default function App() {
                 {myReports.map((t) => {
                   const p = priorityMeta(t.priority_score, t.status);
                   return (
-                    <button key={t.id} type="button" className="ticket-row" onClick={() => openTicket(t.id)}>
+                    <button key={t.id} type="button" className="ticket-row" onClick={() => openTracker(t.id)}>
                       <TicketThumb src={t.image_url} alt="" />
                       <div className="flex-1 min-w-0 text-left">
                         <div className="flex justify-between gap-2">
@@ -1348,51 +1689,58 @@ export default function App() {
               />
             )}
 
-            {trackedTicket && trackedTicket !== 'NOT_FOUND' && (
+            {tracked && tracked !== 'NOT_FOUND' && (
               <section className="card card-pad space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                   <div>
                     <span className="eyebrow">Ticket</span>
-                    <h3 className="text-xl font-bold">{displayTicketId(trackedTicket)}</h3>
+                    <h3 className="text-xl font-bold">{displayTicketId(tracked)}</h3>
                     <p className="eyebrow mt-3" style={{ marginBottom: 0 }}>
-                      {(trackedTicket.category || inferCategory(trackedTicket.description)).toUpperCase()}
+                      {(tracked.category || inferCategory(tracked.description)).toUpperCase()}
                     </p>
                     <p className="text-sm mt-2 flex items-center gap-1">
-                      <MapPin className="w-4 h-4" /> {locationLine(trackedTicket)}
+                      <MapPin className="w-4 h-4" /> {locationLine(tracked)}
                     </p>
-                    <p className="text-xs text-slate-500 mt-1">{trackedTicket.ward_id}</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {tracked.place_name ? `${tracked.place_name} · ` : ''}
+                      {tracked.ward_name ? `${tracked.ward_name} ` : ''}
+                      {tracked.ward_id
+                        ? `(${tracked.ward_id}${tracked.ward_number ? `, No. ${tracked.ward_number}` : ''})`
+                        : 'Ward pending'}
+                      {tracked.zone ? ` · ${tracked.zone}` : ''}
+                    </p>
                     <button type="button" className="ghost-btn mt-3" onClick={() => setTrackerMapOpen(true)}>
                       View on Map
                     </button>
                   </div>
                   <span className="badge badge-med">
-                    {trackedTicket.report_count || trackedTicket.priority_score} citizens
+                    {tracked.report_count || tracked.priority_score} citizens
                   </span>
                 </div>
                 {trackerMapOpen && (
                   <IssueCityMap
-                    tickets={[trackedTicket]}
-                    focus={trackedTicket}
+                    tickets={[tracked]}
+                    focus={tracked}
                     showLabels={false}
                     height={280}
-                    onSelect={openTicket}
+                    onSelect={openTracker}
                   />
                 )}
                 <div className="flex gap-3">
-                  <TicketThumb src={trackedTicket.image_url} alt="" />
+                  <TicketThumb src={tracked.image_url} alt="" />
                   <div className="min-w-0">
-                    <p className="text-sm">{trackedTicket.description}</p>
+                    <p className="text-sm">{tracked.description}</p>
                     <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" /> {trackedTicket.ward_id} · {formatDate(trackedTicket.created_at)}
+                      <Clock className="w-3.5 h-3.5" /> {tracked.ward_id} · {formatDate(tracked.created_at)}
                     </p>
                     <p className="text-xs mt-1">
-                      Status: {STATUS_LABEL[trackedTicket.status] || trackedTicket.status} · Priority:{' '}
-                      {priorityMeta(trackedTicket.priority_score, trackedTicket.status).label}
+                      Status: {STATUS_LABEL[tracked.status] || tracked.status} · Priority:{' '}
+                      {priorityMeta(tracked.priority_score, tracked.status).label}
                     </p>
                   </div>
                 </div>
                 {(() => {
-                  const sla = slaMeta(trackedTicket, civicSettings);
+                  const sla = slaMeta(tracked, civicSettings);
                   return (
                     <div className="sla-panel">
                       <div>
@@ -1404,7 +1752,7 @@ export default function App() {
                       </div>
                       <div>
                         <span className="eyebrow">Expected resolution</span>
-                        <p className="text-sm font-semibold">{formatLongDate(trackedTicket.deadline)}</p>
+                        <p className="text-sm font-semibold">{formatLongDate(tracked.deadline)}</p>
                       </div>
                       <div>
                         <span className="eyebrow">Officer response</span>
@@ -1413,34 +1761,17 @@ export default function App() {
                     </div>
                   );
                 })()}
+                <Satisfaction ticket={tracked} onFeedback={(fb) => handleFeedback(tracked.id, fb)} />
                 <div>
                   <h4 className="eyebrow">Progress</h4>
-                  <div className="timeline mt-2">
-                    {STATUSES.map((s, i) => {
-                      const on = stageIndex(trackedTicket.status) >= i;
-                      return (
-                        <div className="tl-item" key={s}>
-                          <div className="tl-rail">
-                            <div className={`tl-dot ${on ? 'is-on' : ''}`} />
-                            {i < STATUSES.length - 1 && <div className={`tl-line ${stageIndex(trackedTicket.status) > i ? 'is-on' : ''}`} />}
-                          </div>
-                          <div className="pb-4">
-                            <strong className="text-sm">{STATUS_LABEL[s] || s}</strong>
-                            {s === trackedTicket.status && (
-                              <p className="text-xs text-slate-500">Current stage</p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <TicketTimeline ticket={tracked} settings={civicSettings} />
                 </div>
                 <div className="border-t border-slate-200 pt-3">
                   <h4 className="eyebrow">Latest update</h4>
-                  <p className="text-sm mt-1">{citizenUpdateCopy(trackedTicket)}</p>
+                  <p className="text-sm mt-1">{citizenUpdateCopy(tracked)}</p>
                   <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                    <User className="w-3 h-3" /> {trackedTicket.assigned_officer || 'Ward operations'} ·{' '}
-                    {formatDate(trackedTicket.updated_at || trackedTicket.created_at)}
+                    <User className="w-3 h-3" /> {tracked.assigned_officer || 'Ward operations'} ·{' '}
+                    {formatDate(tracked.updated_at || tracked.created_at)}
                   </p>
                 </div>
               </section>
@@ -1457,7 +1788,7 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === 'dashboard' && (
+        {activeTab === 'dashboard' && isOfficer && (
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
@@ -1466,8 +1797,28 @@ export default function App() {
                 <p className="text-sm text-slate-500">
                   One civic problem, one ticket. Sorted by overdue, critical, deadline, then report count.
                 </p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  <span className="scope-chip">
+                    <User className="w-3 h-3" />
+                    {profile?.full_name || user?.email || 'Officer'} · {isAdmin ? 'Administrator' : 'Ward officer'}
+                  </span>
+                  <span className="scope-chip">
+                    <MapPin className="w-3 h-3" />
+                    {isAdmin
+                      ? 'City-wide scope'
+                      : officerProfile?.ward_id
+                        ? `Ward scope ${officerProfile.ward_id}${officerProfile.zone ? ` · ${officerProfile.zone}` : ''}`
+                        : 'No ward assigned yet — an administrator must assign your ward'}
+                  </span>
+                </div>
               </div>
-              <button type="button" onClick={fetchTickets} className="ghost-btn w-fit">
+              <button
+                type="button"
+                onClick={() => {
+                  runOverdueCheck().then(fetchTickets).then(fetchNotifications);
+                }}
+                className="ghost-btn w-fit"
+              >
                 <RefreshCw className="w-3.5 h-3.5" /> Refresh Dispatch
               </button>
             </div>
@@ -1488,6 +1839,75 @@ export default function App() {
                 </div>
               ))}
             </div>
+
+            <section className="card card-pad">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <h3 className="section-title" style={{ margin: 0 }}>
+                  {officerFilter.ward === 'All'
+                    ? 'City snapshot'
+                    : `Ward snapshot · ${wardSnapshot.ward?.ward_name || officerFilter.ward}`}
+                </h3>
+                <WardSelector
+                  value={officerFilter.ward === 'All' ? 'all' : officerFilter.ward}
+                  onChange={(w) => setOfficerFilter({ ...officerFilter, ward: w === 'all' ? 'All' : w })}
+                  id="snapshot-ward"
+                />
+              </div>
+              <div className="snapshot-grid">
+                <div className="snapshot-cell">
+                  <span>Total</span>
+                  <strong>{wardSnapshot.total}</strong>
+                </div>
+                <div className="snapshot-cell">
+                  <span>Active</span>
+                  <strong>{wardSnapshot.open + wardSnapshot.inProgress}</strong>
+                </div>
+                <div className="snapshot-cell">
+                  <span>Resolved</span>
+                  <strong>{wardSnapshot.resolved}</strong>
+                </div>
+                <div className="snapshot-cell">
+                  <span>Overdue</span>
+                  <strong className={wardSnapshot.overdue > 0 ? 'snapshot-alert' : ''}>{wardSnapshot.overdue}</strong>
+                </div>
+                <div className="snapshot-cell">
+                  <span>Performance</span>
+                  <strong>{wardSnapshot.performanceScore}/100</strong>
+                </div>
+                <div className="snapshot-cell">
+                  <span>Health</span>
+                  <strong>
+                    {wardSnapshot.healthScore}/100
+                    <em className={`badge badge-${wardSnapshot.healthStatus.tone === 'urgent' ? 'crit' : wardSnapshot.healthStatus.tone === 'pending' ? 'med' : wardSnapshot.healthStatus.tone === 'info' ? 'assigned' : 'resolved'} ml-2`}>
+                      {wardSnapshot.healthStatus.label}
+                    </em>
+                  </strong>
+                </div>
+              </div>
+              {wardSnapshot.ward && (
+                <p className="text-xs text-slate-500 mt-2">
+                  Ward No. {wardSnapshot.ward.ward_number} · {wardSnapshot.ward.zone} · {wardSnapshot.ward.ward_id}
+                  {wardSnapshot.critical > 0 ? ` · ${wardSnapshot.critical} critical` : ''}
+                </p>
+              )}
+            </section>
+
+            {maintAlerts.length > 0 && (
+              <section className="card card-pad urgent-panel">
+                <h3 className="section-title">Maintenance alerts</h3>
+                <div className="space-y-3">
+                  {maintAlerts.slice(0, 4).map((a) => (
+                    <article key={a.key} className="urgent-card is-overdue">
+                      <div>
+                        <strong>{a.title}</strong>
+                        <p className="text-sm mt-1">{a.message}</p>
+                        <p className="text-xs mt-1">{a.recommendation}</p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <section className="card card-pad urgent-panel">
               <h3 className="section-title">Urgent action required</h3>
@@ -1545,10 +1965,11 @@ export default function App() {
                 <option>Medium</option>
                 <option>Low</option>
               </select>
-              <select value={officerFilter.ward} onChange={(e) => setOfficerFilter({ ...officerFilter, ward: e.target.value })} aria-label="Filter ward">
-                <option>All</option>
-                {[...new Set(tickets.map((t) => t.ward_id))].map((w) => <option key={w}>{w}</option>)}
-              </select>
+              <WardSelector
+                value={officerFilter.ward === 'All' ? 'all' : officerFilter.ward}
+                onChange={(w) => setOfficerFilter({ ...officerFilter, ward: w === 'all' ? 'All' : w })}
+                id="dash-ward-filter"
+              />
               <select value={officerFilter.area} onChange={(e) => setOfficerFilter({ ...officerFilter, area: e.target.value })} aria-label="Filter area">
                 <option>All</option>
                 {areas.map((a) => <option key={a}>{a}</option>)}
@@ -1746,7 +2167,7 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === 'detail' && selected && (
+        {activeTab === 'detail' && isOfficer && selected && (
           <div className="space-y-4">
             <button type="button" className="ghost-btn" onClick={() => go('dashboard')}>Back to queue</button>
             <div className="page-head">
@@ -1771,23 +2192,9 @@ export default function App() {
                 )}
                 <div className="card card-pad">
                   <h3 className="section-title">Timeline</h3>
-                  <div className="timeline">
-                    {STATUSES.map((s, i) => (
-                      <div className="tl-item" key={s}>
-                        <div className="tl-rail">
-                          <div className={`tl-dot ${stageIndex(selected.status) >= i ? 'is-on' : ''}`} />
-                          {i < STATUSES.length - 1 && (
-                            <div className={`tl-line ${stageIndex(selected.status) > i ? 'is-on' : ''}`} />
-                          )}
-                        </div>
-                        <div className="pb-4">
-                            <strong className="text-sm">{STATUS_LABEL[s] || s}</strong>
-                          {s === selected.status && <p className="text-xs text-slate-500">Current</p>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <TicketTimeline ticket={selected} settings={civicSettings} />
                 </div>
+                <Satisfaction ticket={selected} onFeedback={(fb) => handleFeedback(selected.id, fb)} />
               </div>
               <div className="lg:col-span-5 space-y-4">
                 <IssueCityMap tickets={[selected]} focus={selected} showLabels={false} height={280} />
@@ -1816,10 +2223,32 @@ export default function App() {
                   <p className="text-sm"><strong>Ticket:</strong> {displayTicketId(selected)}</p>
                   <p className="text-sm"><strong>Issue:</strong> {selected.category || inferCategory(selected.description)}</p>
                   <p className="text-sm"><strong>Location:</strong> {locationLine(selected)}</p>
+                  <p className="text-sm">
+                    <strong>Place:</strong> {selected.place_name || 'Not identified'}
+                    {selected.place_id ? ` · ${selected.place_id}` : ''}
+                  </p>
+                  <p className="text-sm"><strong>Street:</strong> {selected.street || '—'}</p>
                   <p className="text-sm"><strong>Area:</strong> {selected.area || ticketLocation(selected).area}</p>
-                  <p className="text-sm"><strong>Ward:</strong> {selected.ward_id}</p>
+                  <p className="text-sm">
+                    <strong>Ward:</strong>{' '}
+                    {selected.ward_name
+                      ? `${selected.ward_name} (${selected.ward_id}${selected.ward_number ? `, No. ${selected.ward_number}` : ''})`
+                      : selected.ward_id || 'Not identified'}
+                  </p>
+                  <p className="text-sm"><strong>Zone:</strong> {selected.zone || '—'}</p>
+                  <p className="text-sm">
+                    <strong>Ward detection:</strong>{' '}
+                    {selected.ward_detection === 'manual'
+                      ? 'Selected manually'
+                      : selected.ward_detection === 'auto'
+                        ? 'Auto-detected from location'
+                        : 'Not identified'}
+                  </p>
                   <p className="text-sm"><strong>Reports:</strong> {selected.report_count || selected.priority_score} citizens</p>
                   <p className="text-sm"><strong>Responsible officer:</strong> {selected.assigned_officer || 'Unassigned'}</p>
+                  {selected.officer_reason && (
+                    <p className="text-xs text-slate-500">Why this officer: {selected.officer_reason}</p>
+                  )}
                   <p className="text-sm mono">
                     {Math.abs(Number(selected.latitude)).toFixed(4)}° {Number(selected.latitude) >= 0 ? 'N' : 'S'}
                     <br />
@@ -1876,11 +2305,11 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === 'detail' && !selected && (
+        {activeTab === 'detail' && isOfficer && !selected && (
           <EmptyState title="Issue not found" body="Return to the officer queue and pick a ticket." />
         )}
 
-        {activeTab === 'analytics' && (
+        {activeTab === 'analytics' && isOfficer && (
           <div className="space-y-4">
             <div className="page-head">
               <div>
@@ -1975,7 +2404,76 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === 'settings' && (
+        {activeTab === 'wardmap' && (
+          <div className="space-y-4">
+            <div className="page-head">
+              <div>
+                <p className="eyebrow">Public view</p>
+                <h2>City issue map</h2>
+                <p>Every active civic problem by ward, area and status. No personal citizen information is shown.</p>
+              </div>
+            </div>
+            <PublicWardMap
+              tickets={tickets}
+              height={560}
+              onSelect={(id) => openTracker(id)}
+            />
+          </div>
+        )}
+
+        {activeTab === 'heatmap' && isOfficer && (
+          <div className="space-y-4">
+            <div className="page-head">
+              <div>
+                <p className="eyebrow">Ward intelligence</p>
+                <h2>Issue heatmap</h2>
+                <p>Report density by place, priority and overdue pressure. Filters apply to the map and the ranking.</p>
+              </div>
+            </div>
+            <WardHeatmap tickets={tickets} onSelect={openTicket} height={560} />
+          </div>
+        )}
+
+        {activeTab === 'performance' && isOfficer && (
+          <div className="space-y-4">
+            <div className="page-head">
+              <div>
+                <p className="eyebrow">Ward analytics</p>
+                <h2>Ward performance & health</h2>
+                <p>Resolution speed, SLA compliance, satisfaction, recurring problems and place risk scores.</p>
+              </div>
+            </div>
+            <WardPerformance tickets={tickets} />
+          </div>
+        )}
+
+        {activeTab === 'comparison' && isOfficer && (
+          <div className="space-y-4">
+            <div className="page-head">
+              <div>
+                <p className="eyebrow">Ward analytics</p>
+                <h2>Ward comparison</h2>
+                <p>Rank every active ward on one metric at a time.</p>
+              </div>
+            </div>
+            <WardComparison tickets={tickets} />
+          </div>
+        )}
+
+        {activeTab === 'admin' && isAdmin && (
+          <div className="space-y-4">
+            <div className="page-head">
+              <div>
+                <p className="eyebrow">Administration</p>
+                <h2>Wards & locations</h2>
+                <p>Maintain the verified ward, area and place directory used for automatic ward detection.</p>
+              </div>
+            </div>
+            <AdminLocations tickets={tickets} />
+          </div>
+        )}
+
+        {activeTab === 'settings' && isOfficer && (
           <div className="max-w-2xl space-y-4">
             <div>
               <p className="eyebrow">Workspace</p>
@@ -2073,6 +2571,24 @@ export default function App() {
             </form>
           </div>
         )}
+
+        {(activeTab === 'login' || activeTab === 'register') && (
+          <CitizenAuth mode={activeTab === 'register' ? 'register' : 'login'} />
+        )}
+
+        {activeTab === 'officerLogin' && <OfficerLogin />}
+
+        {activeTab === 'notFound' && (
+          <EmptyState
+            title="Page not found"
+            body={`No page matches ${route.path}. Check the address or return to the Citizen Portal.`}
+            action={
+              <button type="button" className="primary-btn mt-4" onClick={() => go('home')}>
+                Back to Citizen Portal
+              </button>
+            }
+          />
+        )}
       </main>
 
       <nav className="bottom-nav" aria-label="Mobile">
@@ -2080,7 +2596,9 @@ export default function App() {
           { id: 'home', label: 'Home', icon: Home },
           { id: 'reports', label: 'Reports', icon: Inbox },
           { id: 'tracker', label: 'Track', icon: Radio },
-          { id: 'dashboard', label: 'Officer', icon: LayoutDashboard },
+          isOfficer
+            ? { id: 'dashboard', label: 'Officer', icon: LayoutDashboard }
+            : { id: 'login', label: 'Account', icon: User },
         ].map((item) => {
           const Icon = item.icon;
           return (
@@ -2150,7 +2668,36 @@ export default function App() {
       {notifyOpen && (
         <div className="toast-stack notify-drawer">
           <div className="toast">
-            <strong>Notifications</strong>
+            <div className="notify-head">
+              <strong>Notifications</strong>
+              {unreadCount > 0 && (
+                <button type="button" className="link-btn" onClick={markNotificationsRead}>
+                  Mark all read ({unreadCount})
+                </button>
+              )}
+            </div>
+            {user ? (
+              userNotifications.length > 0 && (
+                <>
+                  <h4 className="eyebrow mt-3">Your updates</h4>
+                  <ul className="notify-list">
+                    {userNotifications.slice(0, 6).map((n) => (
+                      <li key={n.id} className={n.read_at ? '' : 'notify-unread'}>
+                        <strong>{n.title}</strong>
+                        <p>{n.body}</p>
+                        <p className="notify-meta">
+                          {formatDate(n.created_at)}
+                          {n.ticket_id ? ` · ${n.ticket_id}` : ''}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )
+            ) : (
+              <p className="mt-1 text-slate-600">Sign in to see status updates about your own complaints here.</p>
+            )}
+            <h4 className="eyebrow mt-3">Dispatch activity</h4>
             {alerts.length === 0 ? (
               <p className="mt-1 text-slate-600">No new municipal alerts. Due-soon and overdue tickets appear here.</p>
             ) : (

@@ -7,7 +7,10 @@ alter table if exists public.tickets
   add column if not exists address text,
   add column if not exists area text,
   add column if not exists ward_id text,
-  add column if not exists report_count integer default 1,
+  -- No default here: a default would be backfilled into existing rows and
+  -- hide the report_count-from-priority_score backfill below. The default is
+  -- applied at the end of this file.
+  add column if not exists report_count integer,
   add column if not exists priority_score numeric default 1,
   add column if not exists latest_reported_at timestamptz,
   add column if not exists deadline timestamptz,
@@ -28,6 +31,8 @@ set
   latest_reported_at = coalesce(latest_reported_at, created_at),
   sla_status = coalesce(sla_status, 'on_track')
 where true;
+
+alter table public.tickets alter column report_count set default 1;
 
 create table if not exists public.submissions (
   submission_id uuid primary key default gen_random_uuid(),

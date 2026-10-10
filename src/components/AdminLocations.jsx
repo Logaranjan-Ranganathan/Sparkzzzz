@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { MapPin, Plus, X } from 'lucide-react';
 import * as directory from '../location/wardDirectory';
 import {

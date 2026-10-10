@@ -8,7 +8,7 @@
  *
  * Contacts are fictional demonstration data.
  */
-import { wardById, getActiveWards } from './location/wardDirectory';
+import { wardById } from './location/wardDirectory';
 import { haversineMeters } from './location/locationService';
 
 export const DEPARTMENTS = [
@@ -97,7 +97,6 @@ function buildSeed() {
 /* ---------- mutable store (admin can reassign / deactivate) ---------- */
 
 const STORAGE_KEY = 'urbangrid_officers_v1';
-const clone = (value) => JSON.parse(JSON.stringify(value));
 
 function loadState() {
   try {
@@ -289,7 +288,6 @@ export function recommendOfficer(tickets = [], { ward_id, category, latitude, lo
 
 /** Convenience for admin tables: officers grouped by ward with workload. */
 export function officersWithWorkload(tickets = []) {
-  const wards = getActiveWards();
   return getOfficers().map((officer) => ({
     ...officer,
     workload: workloadFor(officer, tickets),

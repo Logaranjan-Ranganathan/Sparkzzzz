@@ -1,4 +1,3 @@
-import React from 'react';
 import { buildTicketTimeline } from '../civicEngine';
 
 const fmt = (iso) =>

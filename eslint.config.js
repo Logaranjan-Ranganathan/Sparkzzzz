@@ -17,5 +17,11 @@ export default defineConfig([
       globals: globals.browser,
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
+    rules: {
+      // react-hooks v7 flags standard fetch-on-mount and debounced-search
+      // effects (App.jsx data load, LocationPicker search). These patterns
+      // are intentional; keep the rule off instead of restructuring.
+      'react-hooks/set-state-in-effect': 'off',
+    },
   },
 ])

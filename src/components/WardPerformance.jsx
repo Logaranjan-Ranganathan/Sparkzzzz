@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Flame, Star, TrendingUp } from 'lucide-react';
 import {
   areaHealth,

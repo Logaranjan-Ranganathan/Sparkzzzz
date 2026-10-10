@@ -24,7 +24,6 @@ import {
   getPlaces,
   getWards,
   areaById,
-  placeById,
   wardById,
 } from './wardDirectory';
 
@@ -132,7 +131,7 @@ export const buildLocation = ({ latitude, longitude, place, area, ward, extra = 
   const lat = Number(Number(latitude).toFixed(6));
   const lon = Number(Number(longitude).toFixed(6));
 
-  let resolved = null;
+  let resolved;
   let detected = 'auto';
   if (place) {
     // A picked place still resolves its ward automatically.
@@ -166,7 +165,7 @@ export const buildLocation = ({ latitude, longitude, place, area, ward, extra = 
     state: extra.state || CITY.state,
     postal_code: extra.postal_code || hierarchyPlace?.postal_code || hierarchyArea?.postal_code || hierarchyWard?.postal_code || '',
     address: '',
-    ward_detection: hierarchyWard ? detection : 'none',
+    ward_detection: hierarchyWard ? detected : 'none',
   };
   payload.address = extra.address || formatAddress(payload);
   return payload;
@@ -239,6 +238,7 @@ function suggestionFromArea(area) {
     ward,
     area,
     extra: { place_name: area.area_name, area: area.area_name },
+    detection: 'auto',
   });
   return {
     type: 'area',

@@ -120,7 +120,7 @@ export const calculatePriorityScore = ({
   status,
 } = {}) => {
   if (status === 'Resolved') return 1;
-  let score = 1;
+  let score;
   if (reportCount >= 11) score = 4;
   else if (reportCount >= 6) score = 3;
   else if (reportCount >= 3) score = 2;
@@ -673,6 +673,7 @@ export const ticketPayload = (ticket) => ({
   ward_detection: ticket.ward_detection || 'auto',
   category: ticket.category,
   status: ticket.status,
+  user_id: ticket.user_id || null,
   priority_score: ticket.priority_score,
   report_count: ticket.report_count,
   created_at: ticket.created_at,

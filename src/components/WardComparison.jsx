@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { comparisonRows } from '../analytics/wardAnalytics';
 import { getDemoNotice, subscribe } from '../location/wardDirectory';
 
@@ -54,7 +54,7 @@ const METRICS = {
 export default function WardComparison({ tickets = [] }) {
   const [metric, setMetric] = useState('performance');
   const [, bump] = useState(0);
-  React.useEffect(() => subscribe(() => bump((v) => v + 1)), []);
+  useEffect(() => subscribe(() => bump((v) => v + 1)), []);
 
   const rows = useMemo(() => comparisonRows(tickets), [tickets]);
   const active = METRICS[metric];

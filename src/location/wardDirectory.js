@@ -11,7 +11,7 @@
  *  - Every area belongs to exactly one ward; every place belongs to one ward
  *    (and optionally one area of the same ward).
  */
-import { createClient } from '@supabase/supabase-js';
+import { isSupabaseConfigured, supabase } from '../supabase/client.js';
 import {
   WARDS as SEED_WARDS,
   AREAS as SEED_AREAS,
@@ -90,14 +90,8 @@ function commit() {
 
 /* ---------- best-effort Supabase sync (tables from 002_ward_hierarchy.sql) ---------- */
 
-let remoteClient;
-
 function getRemoteClient() {
-  if (remoteClient !== undefined) return remoteClient;
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  remoteClient = url && key ? createClient(url, key) : null;
-  return remoteClient;
+  return isSupabaseConfigured ? supabase : null;
 }
 
 async function pushRemote() {
@@ -211,10 +205,6 @@ function isBlank(value) {
 
 function validCoord(latitude, longitude) {
   return Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude));
-}
-
-function zoneExists(zoneName) {
-  return ZONES.some((z) => z.zone_name === zoneName || z.zone_id === zoneName);
 }
 
 function normalizeZone(zoneName) {
@@ -437,8 +427,6 @@ export function addPlace(input = {}) {
   commit();
   return { ok: true, place: { ...place } };
 }
-
-const PLACE_PATCH_FIELDS = ['place_name', 'street', 'type', 'area_id', 'ward_id', 'latitude', 'longitude', 'postal_code', 'keywords'];
 
 export function updatePlace(placeId, patch = {}) {
   const place = placeIndex[placeId];

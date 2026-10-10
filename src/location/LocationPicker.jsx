@@ -1,10 +1,13 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { LocateFixed, MapPin, Search } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, LocateFixed, MapPin, Search } from 'lucide-react';
 import { CITY } from './chennaiPlaces';
+import { getActiveWards, subscribe } from './wardDirectory';
 import {
   getBrowserLocation,
+  locationHierarchy,
+  manualWardLocation,
   reverseGeocode,
   searchPlaces,
 } from './locationService';
@@ -16,21 +19,33 @@ const pinIcon = L.divIcon({
   iconAnchor: [14, 28],
 });
 
+const TYPE_LABEL = { place: 'Place', area: 'Area', ward: 'Ward', remote: 'Map result' };
+
 export default function LocationPicker({ value, onChange, gpsError, onGpsError, onClearGpsError }) {
   const mapEl = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
+  const searchRef = useRef(null);
+  const debounce = useRef(null);
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   const [locating, setLocating] = useState(false);
-  const debounce = useRef(null);
+  const [touched, setTouched] = useState(false);
+  const [wardPick, setWardPick] = useState('');
+  const [, bump] = useState(0);
+
+  useEffect(() => subscribe(() => bump((v) => v + 1)), []);
+  const wards = getActiveWards();
 
   const lat = Number(value?.latitude) || CITY.center.latitude;
   const lon = Number(value?.longitude) || CITY.center.longitude;
 
   const applyLocation = (loc, { fly = true } = {}) => {
+    if (!loc) return;
+    setTouched(true);
+    setWardPick(loc.ward_id || '');
     onChange?.(loc);
     const map = mapRef.current;
     const marker = markerRef.current;
@@ -58,13 +73,12 @@ export default function LocationPicker({ value, onChange, gpsError, onGpsError, 
     marker.on('dragend', async () => {
       const { lat: mlat, lng } = marker.getLatLng();
       const loc = await reverseGeocode(mlat, lng);
-      onChange?.(loc);
+      applyLocation(loc, { fly: false });
     });
 
     map.on('click', async (e) => {
       const loc = await reverseGeocode(e.latlng.lat, e.latlng.lng);
-      marker.setLatLng(e.latlng);
-      onChange?.(loc);
+      applyLocation(loc, { fly: false });
     });
 
     mapRef.current = map;
@@ -119,10 +133,18 @@ export default function LocationPicker({ value, onChange, gpsError, onGpsError, 
     }
   };
 
-  const selectedLabel = useMemo(() => {
-    if (!value?.place_name && !value?.address) return 'Tap the map, search, or use current location';
-    return value.address || `${value.place_name}, ${value.city || 'Chennai'}`;
-  }, [value]);
+  const confirmed = Boolean(value?.place_name || value?.address || value?.ward_id);
+  const needsWard = Boolean(!value?.ward_id && (touched || value?.place_name || value?.address));
+  const hierarchyRows = useMemo(
+    () => locationHierarchy(value).filter((row) => row.value && row.value !== '—'),
+    [value]
+  );
+
+  const pickSuggestion = (s) => {
+    applyLocation(s.location);
+    setQuery(s.label);
+    setOpen(false);
+  };
 
   return (
     <div className="loc-picker">
@@ -130,6 +152,7 @@ export default function LocationPicker({ value, onChange, gpsError, onGpsError, 
         <div className="loc-search-float">
           <Search className="w-4 h-4 loc-search-ico" />
           <input
+            ref={searchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => suggestions.length && setOpen(true)}
@@ -138,30 +161,24 @@ export default function LocationPicker({ value, onChange, gpsError, onGpsError, 
             autoComplete="off"
           />
         </div>
-        {open && (suggestions.length > 0 || searching) && (
+        {open && (searching || query.trim()) && (
           <ul className="loc-suggest" role="listbox">
             {searching && <li className="loc-suggest-empty">Searching places…</li>}
-            {suggestions.map((s) => (
-              <li key={`${s.place_name}-${s.latitude}`}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    applyLocation(s);
-                    setQuery(s.place_name);
-                    setOpen(false);
-                  }}
-                >
-                  <MapPin className="w-4 h-4" />
-                  <span>
-                    <strong>{s.place_name}</strong>
-                    <em>
-                      {s.area && s.area !== s.place_name ? `${s.area}, ` : ''}
-                      {s.city}, {s.state}
-                    </em>
-                  </span>
-                </button>
-              </li>
-            ))}
+            {!searching &&
+              suggestions.map((s) => (
+                <li key={`${s.type}-${s.id}`}>
+                  <button type="button" onClick={() => pickSuggestion(s)}>
+                    <MapPin className="w-4 h-4" />
+                    <span>
+                      <strong>
+                        {s.label}
+                        <span className={`loc-chip loc-chip-${s.type}`}>{TYPE_LABEL[s.type] || 'Result'}</span>
+                      </strong>
+                      {s.hierarchy && <em>{s.hierarchy}</em>}
+                    </span>
+                  </button>
+                </li>
+              ))}
             {!searching && suggestions.length === 0 && query.trim() && (
               <li className="loc-suggest-empty">No matching places. Try a Chennai area or landmark.</li>
             )}
@@ -187,7 +204,7 @@ export default function LocationPicker({ value, onChange, gpsError, onGpsError, 
               className="primary-btn"
               onClick={() => {
                 onClearGpsError?.();
-                document.querySelector('.loc-search-float input')?.focus();
+                searchRef.current?.focus();
               }}
             >
               Search Location Manually
@@ -196,32 +213,101 @@ export default function LocationPicker({ value, onChange, gpsError, onGpsError, 
         </div>
       )}
 
-      <div className="loc-sheet">
-        <p className="eyebrow">Selected location</p>
-        <p className="loc-sheet-title">
-          <MapPin className="w-4 h-4" /> {selectedLabel}
-        </p>
-        {value?.ward_id && (
-          <p className="text-sm text-slate-500 mt-1">
-            Ward <strong>{value.ward_id}</strong>
+      {needsWard && (
+        <div className="ward-fallback" role="status">
+          <p className="ward-fallback-title">
+            <AlertTriangle className="w-4 h-4" /> Unable to identify your ward automatically.
           </p>
-        )}
-        <div className="loc-coords">
-          <div>
-            <span>Latitude</span>
-            <strong className="mono">{Number(lat).toFixed(6)}</strong>
-          </div>
-          <div>
-            <span>Longitude</span>
-            <strong className="mono">{Number(lon).toFixed(6)}</strong>
+          <p className="ward-fallback-hint">
+            Select the ward for this location so your report reaches the correct ward team. You never need to type a
+            ward number.
+          </p>
+          <div className="ward-fallback-row">
+            <select
+              className="field-control"
+              aria-label="Select your ward"
+              value={wardPick}
+              onChange={(e) => setWardPick(e.target.value)}
+            >
+              <option value="">Select your ward…</option>
+              {wards.map((w) => (
+                <option key={w.ward_id} value={w.ward_id}>
+                  {w.ward_name} ({w.ward_id}, No. {w.ward_number})
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="primary-btn"
+              disabled={!wardPick}
+              onClick={() => applyLocation(manualWardLocation(wardPick))}
+            >
+              Use This Ward
+            </button>
           </div>
         </div>
-        {value?.place_name && (
-          <p className="text-xs text-slate-500 mt-2">Your report will be associated with this location.</p>
+      )}
+
+      <div className="loc-sheet">
+        {confirmed ? (
+          <>
+            <p className="loc-sheet-confirm">
+              <CheckCircle2 className="w-4 h-4" /> Location confirmed
+            </p>
+            <ul className="loc-hierarchy">
+              {hierarchyRows.map((row) => (
+                <li key={row.key}>
+                  <span>{row.label}</span>
+                  <strong>{row.value}</strong>
+                </li>
+              ))}
+            </ul>
+            {value?.ward_id && (
+              <p className={`loc-detection ${value.ward_detection === 'manual' ? 'is-manual' : 'is-auto'}`}>
+                {value.ward_detection === 'manual' ? 'Ward selected manually' : 'Ward detected automatically'}
+              </p>
+            )}
+            {needsWard && <p className="loc-detection is-missing">Ward not identified yet</p>}
+            <div className="loc-coords">
+              <div>
+                <span>Latitude</span>
+                <strong className="mono">{Number(lat).toFixed(6)}</strong>
+              </div>
+              <div>
+                <span>Longitude</span>
+                <strong className="mono">{Number(lon).toFixed(6)}</strong>
+              </div>
+            </div>
+            <div className="loc-sheet-actions">
+              <button type="button" className="ghost-btn" onClick={() => searchRef.current?.focus()}>
+                <Search className="w-4 h-4" /> Change Location
+              </button>
+              <button type="button" className="ghost-btn" onClick={locateMe} disabled={locating}>
+                <LocateFixed className={`w-4 h-4 ${locating ? 'spin' : ''}`} /> Use my current location
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="eyebrow">Selected location</p>
+            <p className="loc-sheet-title">
+              <MapPin className="w-4 h-4" /> Tap the map, search, or use current location
+            </p>
+            <div className="loc-coords">
+              <div>
+                <span>Latitude</span>
+                <strong className="mono">{Number(lat).toFixed(6)}</strong>
+              </div>
+              <div>
+                <span>Longitude</span>
+                <strong className="mono">{Number(lon).toFixed(6)}</strong>
+              </div>
+            </div>
+            <button type="button" className="ghost-btn mt-3" onClick={locateMe} disabled={locating}>
+              <LocateFixed className="w-4 h-4" /> Use my current location
+            </button>
+          </>
         )}
-        <button type="button" className="ghost-btn mt-3" onClick={locateMe} disabled={locating}>
-          <LocateFixed className="w-4 h-4" /> Use my current location
-        </button>
       </div>
     </div>
   );

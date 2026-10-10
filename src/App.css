@@ -230,6 +230,204 @@
   cursor: pointer;
 }
 
+.avatar.on-dark {
+  background: #fff;
+  color: var(--navy);
+}
+
+.signin-chip {
+  border: 1px solid rgb(255 255 255 / 0.35);
+  background: rgb(255 255 255 / 0.12);
+  color: #fff;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.account-wrap {
+  position: relative;
+}
+
+.account-backdrop {
+  position: fixed;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  z-index: 40;
+  cursor: default;
+}
+
+.account-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: 240px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 8px;
+  z-index: 41;
+}
+
+.account-head {
+  display: grid;
+  gap: 2px;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 6px;
+}
+
+.account-head strong {
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.account-head span {
+  font-size: 12px;
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+}
+
+.account-role {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.account-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 10px;
+  padding: 9px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.account-item:hover {
+  background: var(--bg-muted);
+}
+
+.scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  background: var(--bg-muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.auth-wrap {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.auth-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.auth-head h2 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.03em;
+}
+
+.auth-head p {
+  margin: 4px 0 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.auth-icon {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 12px;
+  background: var(--bg-muted);
+  color: var(--navy);
+  display: grid;
+  place-items: center;
+}
+
+.auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+.auth-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.auth-error {
+  background: var(--urgent-bg);
+  border: 1px solid #f4c7c2;
+  color: var(--urgent);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  margin: 0;
+}
+
+.auth-note {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin: 0;
+}
+
+.auth-switch {
+  font-size: 13px;
+  color: var(--ink-muted);
+  text-align: center;
+  margin: 0;
+}
+
+.auth-terms {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 13px;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--navy);
+  font-weight: 700;
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+@media (max-width: 560px) {
+  .auth-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .app-main {
   grid-column: 2;
   padding: 24px 24px 88px;
@@ -780,6 +978,143 @@
   letter-spacing: -0.02em;
 }
 
+.loc-sheet-confirm {
+  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ok);
+}
+
+.loc-hierarchy {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 14px;
+}
+
+.loc-hierarchy li {
+  min-width: 0;
+}
+
+.loc-hierarchy span {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.loc-hierarchy strong {
+  display: block;
+  font-size: 13px;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.loc-detection {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.loc-detection.is-auto {
+  background: color-mix(in srgb, var(--ok) 12%, #fff);
+  color: var(--ok);
+}
+
+.loc-detection.is-manual {
+  background: color-mix(in srgb, var(--info) 10%, #fff);
+  color: var(--info);
+}
+
+.loc-detection.is-missing {
+  background: color-mix(in srgb, var(--urgent) 10%, #fff);
+  color: var(--urgent);
+}
+
+.loc-sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.loc-chip {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  background: var(--bg-muted);
+  color: var(--ink-muted);
+}
+
+.loc-chip-place {
+  background: var(--navy-soft);
+  color: var(--navy);
+}
+
+.loc-chip-area {
+  background: color-mix(in srgb, var(--info) 10%, #fff);
+  color: var(--info);
+}
+
+.loc-chip-ward {
+  background: color-mix(in srgb, var(--pending) 12%, #fff);
+  color: var(--pending);
+}
+
+.ward-fallback {
+  border: 1px solid color-mix(in srgb, var(--pending) 35%, var(--line));
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--pending) 6%, #fff);
+}
+
+.ward-fallback-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  color: var(--pending);
+}
+
+.ward-fallback-hint {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.ward-fallback-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin-top: 12px;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .ward-fallback-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .loc-coords {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1254,6 +1589,24 @@ table.data tr:hover td {
 .notify-list { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
 .notify-list p { margin: 2px 0 0; font-size: 12px; color: var(--ink-muted); }
 
+.notify-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.notify-unread {
+  border-left: 3px solid var(--navy);
+  padding-left: 8px;
+}
+
+.notify-meta {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .tl-dot.is-warn { background: var(--urgent); }
 
 @media (max-width: 1100px) {
@@ -1373,4 +1726,661 @@ table.data tr:hover td {
 @media (max-width: 640px) {
   .quick-grid { grid-template-columns: 1fr 1fr; }
   .page-head h2 { font-size: 24px; }
+}
+
+/* ============================================================
+   Ward / Area / Place management UI (spec §5–§24)
+   ============================================================ */
+
+/* --- extra badge tones (health, verdicts, risk, trend) --- */
+
+.badge-ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.badge-info {
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+.badge-urgent {
+  background: var(--urgent-bg);
+  color: var(--urgent);
+}
+
+.badge.risk-high {
+  background: var(--urgent-bg);
+  color: var(--urgent);
+}
+
+.badge.risk-medium {
+  background: #fff1e6;
+  color: #c2410c;
+}
+
+.badge.risk-low {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.badge.trend-increasing {
+  background: var(--urgent-bg);
+  color: var(--urgent);
+}
+
+.badge.trend-decreasing {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.badge.trend-steady {
+  background: var(--bg-muted);
+  color: #475569;
+}
+
+/* --- ward dropdown (WardSelector) --- */
+
+.ward-select {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+}
+
+.ward-select .field-control {
+  min-width: 200px;
+}
+
+/* --- public ward map (spec §18) --- */
+
+.public-ward-map {
+  display: grid;
+  gap: 0;
+}
+
+.public-map-filters {
+  margin-bottom: 12px;
+}
+
+.heat-map-wrap {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: #e8eef3;
+}
+
+.public-privacy-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--navy-soft);
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.public-privacy-note svg {
+  flex: none;
+  color: var(--navy);
+}
+
+/* --- ward heatmap body + ranking (spec §10) --- */
+
+.heat-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+  margin-top: 4px;
+}
+
+.heat-ranking .heat-list {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.heat-list li button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--ease), background var(--ease);
+}
+
+.heat-list li button:hover {
+  border-color: var(--navy);
+  background: var(--navy-soft);
+}
+
+.heat-emoji {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.heat-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.heat-meta strong {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.heat-meta em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.heat-score {
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--bg-muted);
+  color: #475569;
+}
+
+.heat-score.heat-high {
+  background: var(--urgent-bg);
+  color: var(--urgent);
+}
+
+.heat-score.heat-medium {
+  background: #fff1e6;
+  color: #c2410c;
+}
+
+.heat-score.heat-low {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+/* --- ward comparison (spec §14) --- */
+
+.ward-comparison {
+  display: grid;
+  gap: 4px;
+}
+
+.compare-bars {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.compare-bars li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.compare-bars li.is-empty {
+  opacity: 0.55;
+}
+
+.compare-rank {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--navy-soft);
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.compare-bar-row {
+  min-width: 0;
+}
+
+.compare-bar-row > .flex {
+  gap: 12px;
+}
+
+.chart-fill.is-top {
+  background: var(--ok);
+}
+
+/* --- ward performance (spec §8, §9, §11–§13, §23, §24) --- */
+
+.ward-performance {
+  display: grid;
+  gap: 16px;
+}
+
+.ward-perf-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 16px;
+}
+
+.ward-meta strong {
+  font-size: 15px;
+}
+
+.ward-score-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.ward-score-card .score-ring {
+  flex: none;
+}
+
+.ward-score-row .ward-kpis {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+.perf-metrics {
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.perf-metrics li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px dashed var(--line);
+  padding-bottom: 4px;
+}
+
+.perf-metrics li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.perf-metrics span {
+  color: var(--ink-muted);
+}
+
+.area-health-list {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.area-health-list li {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.area-health-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+/* --- recurring problems + mini bars (spec §12) --- */
+
+.recurring-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.recurring-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  background: var(--surface);
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.mini-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 64px;
+}
+
+.mini-bar {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+}
+
+.mini-bar span {
+  width: 100%;
+  background: var(--navy);
+  border-radius: 3px 3px 0 0;
+}
+
+.mini-bar em {
+  font-style: normal;
+  font-size: 9px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.recurring-rec {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.recurring-rec svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--warn);
+}
+
+/* --- maintenance alerts (spec §13) --- */
+
+.maintenance-alerts {
+  display: grid;
+  gap: 8px;
+}
+
+.urgent-panel {
+  border-color: #f3c9c3;
+  background: #fffbfa;
+}
+
+/* --- place risk scores (spec §24) --- */
+
+.risk-list {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.risk-list li {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.risk-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.risk-score {
+  margin-left: auto;
+  font-weight: 700;
+}
+
+/* --- star ratings --- */
+
+.star-display {
+  display: inline-flex;
+  gap: 2px;
+  color: var(--warn);
+}
+
+.star-display .is-off {
+  color: var(--line-strong);
+}
+
+/* --- citizen satisfaction (spec §26) --- */
+
+.satisfaction {
+  display: grid;
+  gap: 10px;
+}
+
+.satisfaction-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.satisfaction-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color var(--ease), background var(--ease), color var(--ease);
+}
+
+.satisfaction-btn:hover {
+  border-color: var(--navy);
+}
+
+.satisfaction-btn.is-on.is-up {
+  border-color: var(--ok);
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.satisfaction-btn.is-on.is-down {
+  border-color: var(--urgent);
+  background: var(--urgent-bg);
+  color: var(--urgent);
+}
+
+.satisfaction-stars {
+  border-top: 1px dashed var(--line);
+  padding-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.star-row {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.star {
+  background: none;
+  border: 0;
+  padding: 2px;
+  cursor: pointer;
+  color: var(--line-strong);
+  line-height: 0;
+}
+
+.star.is-on {
+  color: var(--warn);
+}
+
+/* --- admin location manager (spec §15, §20) --- */
+
+.admin-locations {
+  display: grid;
+  gap: 16px;
+}
+
+.admin-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-head-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.confirm-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-contact {
+  line-height: 1.4;
+}
+
+tr.is-inactive td {
+  opacity: 0.55;
+}
+
+/* --- 10-stage ticket timeline (spec §25) --- */
+
+.ticket-timeline .tl-now {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.tl-dot.is-current {
+  background: var(--info);
+  box-shadow: 0 0 0 3px var(--info-bg);
+}
+
+/* --- officer dashboard ward snapshot --- */
+
+.snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.snapshot-cell {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  background: var(--surface);
+}
+
+.snapshot-cell > span {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+
+.snapshot-cell > strong {
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.snapshot-cell .badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.snapshot-alert {
+  color: var(--urgent);
+}
+
+/* --- responsive --- */
+
+@media (max-width: 1024px) {
+  .heat-body {
+    grid-template-columns: 1fr;
+  }
+
+  .heat-ranking .heat-list {
+    max-height: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .ward-score-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .ward-select,
+  .ward-select .field-control {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .admin-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-head .seg {
+    flex-wrap: wrap;
+  }
+
+  .snapshot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .recurring-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .satisfaction-thumbs {
+    flex-direction: column;
+  }
+
+  .satisfaction-btn {
+    justify-content: center;
+  }
 }

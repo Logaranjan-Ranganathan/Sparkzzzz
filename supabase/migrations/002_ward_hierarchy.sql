@@ -62,7 +62,13 @@ create table if not exists public.officers (
 );
 
 -- Ticket extensions: hierarchy, officer, timeline, citizen feedback.
+-- image_url / postal_code / city / state are part of the app's ticket payload;
+-- legacy installs lack them, and without them every online upsert would fail.
 alter table if exists public.tickets
+  add column if not exists image_url text,
+  add column if not exists postal_code text,
+  add column if not exists city text,
+  add column if not exists state text,
   add column if not exists place_id text,
   add column if not exists street text,
   add column if not exists area_id text,
@@ -91,10 +97,30 @@ begin
     add constraint tickets_ticket_id_key unique (ticket_id);
 exception
   when duplicate_object then null;
+  when duplicate_table then null;
   when undefined_column then null;
 end $$;
 
 -- submissions → tickets (spec §21 foreign key chain).
+-- Legacy installs may have declared submissions.ticket_id as uuid while the
+-- application uses display ids (UG-2026-00101). Normalise it to text first so
+-- the reference is comparable. If pre-existing orphan rows prevent the
+-- constraint, the migration continues with a warning rather than aborting —
+-- the security model does not depend on this FK.
+do $$
+declare
+  v_type text;
+begin
+  select data_type into v_type
+    from information_schema.columns
+   where table_schema = 'public'
+     and table_name = 'submissions'
+     and column_name = 'ticket_id';
+  if v_type is not null and v_type not in ('text', 'character varying') then
+    execute 'alter table public.submissions alter column ticket_id type text using ticket_id::text';
+  end if;
+end $$;
+
 do $$
 begin
   alter table public.submissions
@@ -103,6 +129,8 @@ begin
 exception
   when duplicate_object then null;
   when undefined_column then null;
+  when others then
+    raise warning 'submissions → tickets foreign key not added: %', sqlerrm;
 end $$;
 
 -- Soft references on tickets (place_id/area_id) are intentionally NOT hard
