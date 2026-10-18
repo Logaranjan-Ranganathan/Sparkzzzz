@@ -1,10 +1,18 @@
 # Dependencies
 node_modules/
+node_modules/@supabase/cli-windows-x64/
+*.exe
+*.dll
+*.so
+*.dylib
+supabase/.temp/
+.supabase/
 
 # Environment — never commit secrets
 .env
 .env.local
 .env.*.local
+*.local
 
 # Build output
 dist/

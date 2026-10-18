@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, KeyRound, MailCheck, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Eye, EyeOff, KeyRound, MailCheck, ShieldCheck } from 'lucide-react';
 import { useAuth } from './session.jsx';
 import { friendlyAuthError as friendlyError } from './authMessages.js';
 import EmptyState from '../components/EmptyState.jsx';
@@ -40,7 +40,10 @@ function SignedInPanel() {
           {roleLabel}. Complaints filed from this browser are linked to your account so you can follow their status.
         </p>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="primary-btn" onClick={() => navigate(pathForTab('reports'))}>
+          <button type="button" className="primary-btn" onClick={() => navigate(pathForTab('citizenDashboard'))}>
+            Citizen Dashboard
+          </button>
+          <button type="button" className="ghost-btn" onClick={() => navigate(pathForTab('reports'))}>
             My Complaints
           </button>
           {isOfficer && (
@@ -213,6 +216,8 @@ function ResetPasswordPanel({ onDone }) {
 function RegisterPanel({ onSignedIn }) {
   const { signUp } = useAuth();
   const [form, setForm] = useState({ fullName: '', email: '', phone: '', password: '', confirm: '', terms: false });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [sentTo, setSentTo] = useState(null);
@@ -259,7 +264,6 @@ function RegisterPanel({ onSignedIn }) {
     try {
       const data = await signUp({ email, password: form.password, fullName: form.fullName.trim(), phone });
       if (data?.session) {
-        // Email confirmation is disabled on this deployment — signed in already.
         onSignedIn();
         return;
       }
@@ -274,9 +278,22 @@ function RegisterPanel({ onSignedIn }) {
   return (
     <div className="auth-wrap">
       <div className="card card-pad">
+        <div className="flex items-center justify-between mb-2">
+          <button
+            type="button"
+            className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1"
+            onClick={() => navigate(pathForTab('portal'))}
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Portal selection
+          </button>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
+            Citizen Registration
+          </span>
+        </div>
+
         <PanelHead
           icon={ShieldCheck}
-          title="Create your citizen account"
+          title="Create Citizen Account"
           body="Track your complaints and their resolution timeline in one place."
         />
         <form className="auth-form" onSubmit={submit} noValidate>
@@ -334,29 +351,49 @@ function RegisterPanel({ onSignedIn }) {
               <label className="field-label" htmlFor="reg-password">
                 Password
               </label>
-              <input
-                id="reg-password"
-                className="field-control"
-                type="password"
-                autoComplete="new-password"
-                value={form.password}
-                onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
-                placeholder="At least 8 characters"
-              />
+              <div className="relative">
+                <input
+                  id="reg-password"
+                  className="field-control pr-9"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  value={form.password}
+                  onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
+                  placeholder="At least 8 characters"
+                />
+                <button
+                  type="button"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
             </div>
             <div>
               <label className="field-label" htmlFor="reg-confirm">
                 Confirm password
               </label>
-              <input
-                id="reg-confirm"
-                className="field-control"
-                type="password"
-                autoComplete="new-password"
-                value={form.confirm}
-                onChange={(e) => setForm((p) => ({ ...p, confirm: e.target.value }))}
-                placeholder="Repeat the password"
-              />
+              <div className="relative">
+                <input
+                  id="reg-confirm"
+                  className="field-control pr-9"
+                  type={showConfirm ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  value={form.confirm}
+                  onChange={(e) => setForm((p) => ({ ...p, confirm: e.target.value }))}
+                  placeholder="Repeat the password"
+                />
+                <button
+                  type="button"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                  onClick={() => setShowConfirm((v) => !v)}
+                  aria-label={showConfirm ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirm ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
             </div>
           </div>
           <label className="auth-terms" htmlFor="reg-terms">
@@ -389,7 +426,8 @@ function RegisterPanel({ onSignedIn }) {
 function LoginPanel() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ email: '', password: '' });
+  const [form, setForm] = useState({ email: '', password: '', remember: true });
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [forgot, setForgot] = useState(false);
@@ -404,7 +442,7 @@ function LoginPanel() {
     setBusy(true);
     try {
       await signIn({ email: cleanEmail(form.email), password: form.password });
-      navigate(pathForTab('reports'));
+      navigate(pathForTab('citizenDashboard'));
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -415,7 +453,20 @@ function LoginPanel() {
   return (
     <div className="auth-wrap">
       <div className="card card-pad">
-        <PanelHead icon={KeyRound} title="Sign in to UrbanGrid" body="Track your complaints and their resolution status." />
+        <div className="flex items-center justify-between mb-2">
+          <button
+            type="button"
+            className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1"
+            onClick={() => navigate(pathForTab('portal'))}
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Portal selection
+          </button>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
+            Citizen Access
+          </span>
+        </div>
+
+        <PanelHead icon={KeyRound} title="Citizen Sign In" body="Access your civic complaints, track resolution timelines, and verify completed work." />
         <form className="auth-form" onSubmit={submit} noValidate>
           {error && (
             <p className="auth-error" role="alert">
@@ -424,7 +475,7 @@ function LoginPanel() {
           )}
           <div>
             <label className="field-label" htmlFor="login-email">
-              Email
+              Email Address
             </label>
             <input
               id="login-email"
@@ -440,17 +491,28 @@ function LoginPanel() {
             <label className="field-label" htmlFor="login-password">
               Password
             </label>
-            <input
-              id="login-password"
-              className="field-control"
-              type="password"
-              autoComplete="current-password"
-              value={form.password}
-              onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
-            />
+            <div className="relative">
+              <input
+                id="login-password"
+                className="field-control pr-10"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                value={form.password}
+                onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
+                placeholder="Enter your password"
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
           <button type="submit" className="primary-btn" disabled={busy}>
-            {busy ? 'Signing in…' : 'Sign in'}
+            {busy ? 'Signing in…' : 'Sign In as Citizen'}
           </button>
           <p className="auth-switch">
             <button type="button" className="link-btn" onClick={() => setForgot(true)}>
@@ -458,15 +520,17 @@ function LoginPanel() {
             </button>
             {' · '}
             <button type="button" className="link-btn" onClick={() => navigate(pathForTab('register'))}>
-              Create an account
+              Create citizen account
             </button>
           </p>
-          <p className="auth-note">
-            Municipal officer?{' '}
-            <button type="button" className="link-btn" onClick={() => navigate(pathForTab('officerLogin'))}>
-              Officer sign-in
-            </button>
-          </p>
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+            <p className="text-xs text-slate-500">
+              Municipal Officer?{' '}
+              <button type="button" className="font-semibold text-amber-600 dark:text-amber-400 hover:underline" onClick={() => navigate(pathForTab('officerLogin'))}>
+                Go to Officer Sign In
+              </button>
+            </p>
+          </div>
         </form>
       </div>
     </div>

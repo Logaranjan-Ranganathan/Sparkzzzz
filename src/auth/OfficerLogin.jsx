@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { KeyRound, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, KeyRound, ShieldAlert } from 'lucide-react';
 import { useAuth } from './session.jsx';
 import { friendlyAuthError } from './authMessages.js';
 import EmptyState from '../components/EmptyState.jsx';
@@ -25,6 +25,7 @@ export default function OfficerLogin() {
   const navigate = useNavigate();
   const from = location.state?.from || pathForTab('dashboard');
   const [form, setForm] = useState({ email: '', password: '' });
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -50,23 +51,22 @@ export default function OfficerLogin() {
       <div className="auth-wrap">
         <div className="card card-pad">
           <div className="auth-head">
-            <div className="auth-icon">
-              <ShieldCheck className="w-5 h-5" />
+            <div className="auth-icon bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400">
+              <ShieldAlert className="w-5 h-5" />
             </div>
             <div>
-              <h2>Officer access is provisioned by administrators</h2>
+              <h2>Officer access is administrator-provisioned</h2>
               <p>
-                {profile?.full_name || user.email} is a citizen account. Officer access is granted by a municipal
-                administrator from the database — it cannot be enabled from this page.
+                <strong>{profile?.full_name || user.email}</strong> is a citizen account. Municipal officer access is restricted to authorized personnel and configured directly in the database.
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 mt-4">
+            <button type="button" className="primary-btn" onClick={() => navigate(pathForTab('citizenDashboard'))}>
+              Go to Citizen Dashboard
+            </button>
             <button type="button" className="ghost-btn" onClick={() => signOut()}>
               Sign out to use an officer account
-            </button>
-            <button type="button" className="primary-btn" onClick={() => navigate(pathForTab('home'))}>
-              Go to Citizen Portal
             </button>
           </div>
         </div>
@@ -78,7 +78,7 @@ export default function OfficerLogin() {
     event.preventDefault();
     setError(null);
     if (!EMAIL_RE.test(form.email.trim())) {
-      setError('Enter a valid email address.');
+      setError('Enter a valid officer email address.');
       return;
     }
     if (!form.password) {
@@ -87,9 +87,6 @@ export default function OfficerLogin() {
     }
     setBusy(true);
     try {
-      // On success the auth state updates and this page re-renders: officers
-      // are forwarded to their dashboard, citizen accounts see the notice
-      // above. Authorization itself is enforced in the database.
       await signIn({ email: form.email.trim(), password: form.password });
     } catch (err) {
       setError(friendlyAuthError(err));
@@ -101,18 +98,31 @@ export default function OfficerLogin() {
   return (
     <div className="auth-wrap">
       <div className="card card-pad">
+        <div className="flex items-center justify-between mb-2">
+          <button
+            type="button"
+            className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1"
+            onClick={() => navigate(pathForTab('portal'))}
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Portal selection
+          </button>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-900">
+            Municipal Staff
+          </span>
+        </div>
+
         <div className="auth-head">
-          <div className="auth-icon">
+          <div className="auth-icon bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400">
             <KeyRound className="w-5 h-5" />
           </div>
           <div>
-            <h2>Officer sign-in</h2>
+            <h2>Municipal Officer Sign In</h2>
             <p>
-              Municipal staff only. Accounts are provisioned by an administrator — there is no self-registration for
-              officer access.
+              Authorized municipal staff only. Accounts are provisioned by an administrator with ward-level dispatch scopes.
             </p>
           </div>
         </div>
+
         <form className="auth-form" onSubmit={submit} noValidate>
           {error && (
             <p className="auth-error" role="alert">
@@ -121,7 +131,7 @@ export default function OfficerLogin() {
           )}
           <div>
             <label className="field-label" htmlFor="officer-email">
-              Work email
+              Official Work Email
             </label>
             <input
               id="officer-email"
@@ -130,33 +140,43 @@ export default function OfficerLogin() {
               autoComplete="email"
               value={form.email}
               onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
-              placeholder="officer@municipality.example"
+              placeholder="officer@municipality.gov"
             />
           </div>
           <div>
             <label className="field-label" htmlFor="officer-password">
               Password
             </label>
-            <input
-              id="officer-password"
-              className="field-control"
-              type="password"
-              autoComplete="current-password"
-              value={form.password}
-              onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
-            />
+            <div className="relative">
+              <input
+                id="officer-password"
+                className="field-control pr-10"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                value={form.password}
+                onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
+                placeholder="Enter officer password"
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
-          <button type="submit" className="primary-btn" disabled={busy}>
-            {busy ? 'Signing in…' : 'Sign in as officer'}
+          <button type="submit" className="primary-btn bg-slate-900 hover:bg-slate-800 dark:bg-amber-600 dark:hover:bg-amber-700" disabled={busy}>
+            {busy ? 'Verifying officer credentials…' : 'Sign In as Officer'}
           </button>
-          <p className="auth-note">
-            Ward scope is set by the administrator for each officer account. A signed-in officer only sees complaints in
-            their assigned ward.
-          </p>
+          <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300">
+            <strong>Security Notice:</strong> Role and ward authorization are enforced by Supabase Row Level Security. Public registration does not grant officer privileges.
+          </div>
           <p className="auth-switch">
-            Citizen?{' '}
-            <button type="button" className="link-btn" onClick={() => navigate(pathForTab('login'))}>
-              Use the citizen sign-in
+            Public citizen?{' '}
+            <button type="button" className="link-btn font-semibold text-blue-600 dark:text-blue-400" onClick={() => navigate(pathForTab('login'))}>
+              Go to Citizen Portal
             </button>
           </p>
         </form>
@@ -164,3 +184,4 @@ export default function OfficerLogin() {
     </div>
   );
 }
+

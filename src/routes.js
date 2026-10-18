@@ -2,6 +2,8 @@
 
 export const TAB_PATHS = {
   home: '/',
+  portal: '/portal',
+  citizenDashboard: '/citizen/dashboard',
   report: '/report-issue',
   reports: '/my-complaints',
   tracker: '/track-complaint',
@@ -29,13 +31,17 @@ export const pathForTab = (tab, param) => {
 export const matchRoute = (pathname) => {
   const clean = pathname.replace(/\/+$/, '') || '/';
 
-  const track = clean.match(/^\/track-complaint\/([^/]+)$/);
+  const track = clean.match(/^\/track-complaint\/([^/]+)$/) || clean.match(/^\/complaints\/(?!new$)([^/]+)$/);
   if (track) return { tab: 'tracker', param: decodeURIComponent(track[1]) };
+
+  if (clean === '/complaints/new' || clean === '/complaints') return { tab: 'report' };
 
   const issue = clean.match(/^\/officer\/issues\/([^/]+)$/);
   if (issue) return { tab: 'detail', param: decodeURIComponent(issue[1]) };
 
   if (clean === '/officer/issues') return { tab: 'dashboard' };
+  if (clean === '/auth') return { tab: 'portal' };
+  if (clean === '/citizen-dashboard') return { tab: 'citizenDashboard' };
 
   const found = Object.entries(TAB_PATHS).find(([, path]) => path === clean);
   if (found) return { tab: found[0] };

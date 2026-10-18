@@ -2384,3 +2384,207 @@ tr.is-inactive td {
     justify-content: center;
   }
 }
+
+/* ==========================================================================
+   GLOBAL DARK MODE SYSTEM & COMPONENT OVERRIDES
+   ========================================================================== */
+
+/* Theme Toggle Button */
+.theme-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  transition: all var(--ease);
+}
+
+.theme-btn:hover {
+  background: var(--bg-muted);
+  border-color: var(--line-strong);
+}
+
+.theme-toggle-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-muted);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.theme-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: all var(--ease);
+}
+
+.theme-chip-btn.is-active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.1);
+}
+
+/* Dark Mode Global Overrides */
+html.dark .card,
+:root[data-theme='dark'] .card {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+html.dark .topbar,
+:root[data-theme='dark'] .topbar {
+  background: rgb(23 32 51 / 0.92);
+  border-bottom-color: var(--line);
+}
+
+html.dark .mobile-top,
+:root[data-theme='dark'] .mobile-top {
+  background: var(--navy);
+  border-bottom-color: var(--line);
+}
+
+html.dark .field-control,
+:root[data-theme='dark'] .field-control,
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background: var(--bg-muted);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+html.dark .field-control:focus,
+:root[data-theme='dark'] .field-control:focus {
+  background: var(--surface);
+  border-color: #3b82f6;
+}
+
+html.dark .quick-card,
+html.dark .cat-card,
+:root[data-theme='dark'] .quick-card,
+:root[data-theme='dark'] .cat-card {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+html.dark .quick-card:hover,
+html.dark .cat-card:hover {
+  border-color: #475569;
+  background: var(--bg-muted);
+}
+
+html.dark .ticket-row,
+:root[data-theme='dark'] .ticket-row {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+html.dark .ticket-row:hover {
+  background: var(--bg-muted);
+  border-color: #475569;
+}
+
+html.dark .urgent-card,
+:root[data-theme='dark'] .urgent-card {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+html.dark .data,
+:root[data-theme='dark'] .data {
+  color: var(--ink);
+}
+
+html.dark .data th,
+:root[data-theme='dark'] .data th {
+  background: var(--bg-muted);
+  color: var(--ink-muted);
+  border-bottom-color: var(--line);
+}
+
+html.dark .data td,
+:root[data-theme='dark'] .data td {
+  border-bottom-color: var(--line);
+}
+
+html.dark .data tr:hover td,
+:root[data-theme='dark'] .data tr:hover td {
+  background: var(--bg-muted);
+}
+
+html.dark .row-overdue td {
+  background: rgb(69 10 10 / 0.3) !important;
+}
+
+html.dark .seg,
+:root[data-theme='dark'] .seg {
+  background: var(--bg-muted);
+  border-color: var(--line);
+}
+
+html.dark .seg button.is-on,
+:root[data-theme='dark'] .seg button.is-on {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+html.dark .account-pop,
+:root[data-theme='dark'] .account-pop {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+html.dark .account-head,
+:root[data-theme='dark'] .account-head {
+  border-bottom-color: var(--line);
+}
+
+html.dark .account-head strong {
+  color: var(--ink);
+}
+
+html.dark .account-item:hover {
+  background: var(--bg-muted);
+}
+
+html.dark .scope-chip,
+:root[data-theme='dark'] .scope-chip {
+  background: var(--bg-muted);
+  border-color: var(--line);
+  color: var(--ink-muted);
+}
+
+html.dark .drawer-sheet,
+:root[data-theme='dark'] .drawer-sheet {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+html.dark .leaflet-popup-content-wrapper,
+html.dark .leaflet-popup-tip {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.5);
+}
+

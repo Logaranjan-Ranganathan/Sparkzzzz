@@ -5,7 +5,18 @@ import { useAuth } from './auth/session.jsx';
 import RequireOfficer, { RequireAdmin } from './auth/guards.jsx';
 import CitizenAuth from './auth/AuthScreens.jsx';
 import OfficerLogin from './auth/OfficerLogin.jsx';
+import AuthPortal from './auth/AuthPortal.jsx';
+import PublicDashboard from './components/PublicDashboard.jsx';
+import OfficerEditModal from './components/OfficerEditModal.jsx';
+import ThemeToggle from './theme/ThemeToggle.jsx';
 import EmptyState from './components/EmptyState.jsx';
+import { exportTicketsToCSV } from './analytics/exportCsv.js';
+import {
+  submitComplaintOnlineFirst,
+  updateComplaintOnlineFirst,
+  flushOfflineQueue,
+  getOfflineQueue,
+} from './sync/syncManager.js';
 import {
   AlertTriangle,
   ArrowRight,
@@ -15,7 +26,9 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock,
+  Download,
   Droplets,
+  Edit3,
   FileText,
   Filter,
   Flame,
@@ -82,7 +95,6 @@ import {
   seedTimeline,
   slaMeta,
   sortOfficerQueue,
-  ticketPayload,
   timelineEvent,
 } from './civicEngine.js';
 
@@ -295,7 +307,7 @@ const SEED = [
 function AccountMenu({ user, profile, isOfficer, isAdmin, open, onToggle, onClose, onNavigate, onSignOut, dark }) {
   if (!user) {
     return (
-      <button type="button" className={dark ? 'signin-chip' : 'ghost-btn'} onClick={() => onNavigate('login')}>
+      <button type="button" className={dark ? 'signin-chip' : 'ghost-btn'} onClick={() => onNavigate('portal')}>
         Sign in
       </button>
     );
@@ -331,14 +343,18 @@ function AccountMenu({ user, profile, isOfficer, isAdmin, open, onToggle, onClos
               <span>{user.email}</span>
               <span className="account-role">{roleLabel}</span>
             </div>
-            <button type="button" className="account-item" role="menuitem" onClick={() => onNavigate('reports')}>
-              My Complaints
-            </button>
-            {isOfficer && (
+            {isOfficer ? (
               <button type="button" className="account-item" role="menuitem" onClick={() => onNavigate('dashboard')}>
                 Officer Dashboard
               </button>
+            ) : (
+              <button type="button" className="account-item" role="menuitem" onClick={() => onNavigate('citizenDashboard')}>
+                Citizen Dashboard
+              </button>
             )}
+            <button type="button" className="account-item" role="menuitem" onClick={() => onNavigate('reports')}>
+              My Complaints
+            </button>
             <button type="button" className="account-item" role="menuitem" onClick={onSignOut}>
               Sign out
             </button>
@@ -397,7 +413,89 @@ export default function App() {
   const [alerts, setAlerts] = useState([]);
   const [userNotifications, setUserNotifications] = useState([]);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [offlineQueueCount, setOfflineQueueCount] = useState(() => getOfflineQueue().length);
+  const [syncing, setSyncing] = useState(false);
+  const [editModalTicket, setEditModalTicket] = useState(null);
   const fileRef = useRef(null);
+
+  const updateOfflineQueueState = useCallback(() => {
+    setOfflineQueueCount(getOfflineQueue().length);
+  }, []);
+
+  const manualSyncQueue = useCallback(async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const result = await flushOfflineQueue(supabase, ({ ticketId, ticket: updatedTicket }) => {
+        setTickets((prev) => prev.map((t) => (t.id === ticketId || t.ticket_id === ticketId ? updatedTicket : t)));
+      });
+      updateOfflineQueueState();
+      if (result.succeeded > 0) {
+        setNotification({
+          type: 'success',
+          title: 'Queue Synchronized',
+          message: `Successfully synchronized ${result.succeeded} complaint(s) with municipal server.`,
+          tone: 'ok',
+        });
+      } else if (result.failed > 0) {
+        setNotification({
+          type: 'warning',
+          title: 'Sync Incomplete',
+          message: `${result.failed} item(s) could not sync: ${result.errors[0] || 'Check network'}`,
+          tone: 'urgent',
+        });
+      } else {
+        setNotification({
+          type: 'info',
+          title: 'Queue Clear',
+          message: 'All complaints are fully synchronized with the database.',
+          tone: 'info',
+        });
+      }
+    } catch (err) {
+      setNotification({
+        type: 'warning',
+        title: 'Sync Failed',
+        message: err.message,
+        tone: 'urgent',
+      });
+    } finally {
+      setSyncing(false);
+    }
+  }, [syncing, updateOfflineQueueState]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      manualSyncQueue();
+    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('urbangrid_sync_event', updateOfflineQueueState);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('urbangrid_sync_event', updateOfflineQueueState);
+    };
+  }, [manualSyncQueue, updateOfflineQueueState]);
+
+  const handleOfficerSaveTicket = async (ticketToUpdate, patch) => {
+    const res = await updateComplaintOnlineFirst({
+      ticket: ticketToUpdate,
+      patch,
+      supabaseClient: supabase,
+    });
+    const updated = applyTicketLocation(res.ticket, civicSettings);
+    setTickets((prev) => prev.map((t) => (t.id === ticketToUpdate.id ? updated : t)));
+    updateOfflineQueueState();
+    const note = {
+      type: 'success',
+      title: `Ticket ${displayTicketId(updated)} Updated`,
+      message: res.synced
+        ? `Changes successfully saved and synced to municipal server.`
+        : `Changes saved locally (Pending Sync). Will auto-sync when online.`,
+      tone: 'ok',
+    };
+    setNotification(note);
+    pushAlert(note);
+  };
 
   const pushAlert = (evt) => {
     setAlerts((prev) => [{ id: `${Date.now()}-${evt.type}`, at: new Date().toISOString(), ...evt }, ...prev].slice(0, 20));
@@ -554,22 +652,6 @@ export default function App() {
     }
   };
 
-  const persistTicket = async (ticket) => {
-    try {
-      await withTimeout(supabase.from('tickets').upsert([ticketPayload(ticket)]));
-    } catch {
-      console.warn('Ticket saved locally');
-    }
-  };
-
-  const persistSubmission = async (row) => {
-    try {
-      await withTimeout(supabase.from('submissions').insert([row]));
-    } catch {
-      console.warn('Submission saved locally');
-    }
-  };
-
   const buildNewTicket = (lat, lon) => {
     const loc = buildLocation({
       latitude: lat,
@@ -672,8 +754,13 @@ export default function App() {
         },
         civicSettings
       );
-      await persistTicket(updated);
-      await persistSubmission(submission);
+      const updateRes = await updateComplaintOnlineFirst({
+        ticket: updated,
+        patch: { report_count, latest_reported_at: now },
+        supabaseClient: supabase,
+      });
+      updated = updateRes.ticket;
+      updateOfflineQueueState();
     }
 
     setSubmissions((prev) => [submission, ...prev]);
@@ -703,12 +790,28 @@ export default function App() {
       category: newTicket.category,
       created_at: newTicket.created_at,
     };
-    await persistTicket(newTicket);
-    await persistSubmission(submission);
+    
+    // Online-first submission with offline queue fallback
+    const syncRes = await submitComplaintOnlineFirst({
+      ticket: newTicket,
+      submission,
+      supabaseClient: supabase,
+    });
+
+    const savedTicket = syncRes.ticket;
     setSubmissions((prev) => [submission, ...prev]);
-    setTickets((prev) => [newTicket, ...prev]);
-    setSubmittedTicket(newTicket);
-    const note = notificationForEvent('created', newTicket);
+    setTickets((prev) => [savedTicket, ...prev]);
+    setSubmittedTicket(savedTicket);
+    updateOfflineQueueState();
+
+    const baseNote = notificationForEvent('created', savedTicket);
+    const note = {
+      ...baseNote,
+      message: syncRes.synced
+        ? `Ticket ${displayTicketId(savedTicket)} successfully submitted & synced with municipal dispatch.`
+        : `Ticket ${displayTicketId(savedTicket)} stored locally (Pending Sync). Will auto-sync when online.`,
+      tone: syncRes.synced ? 'ok' : 'pending',
+    };
     setNotification(note);
     pushAlert(note);
     setPendingDuplicate(null);
@@ -832,16 +935,17 @@ export default function App() {
       ];
     }
 
-    const next = applyTicketLocation(patch, civicSettings);
     setConfirmResolve(null);
     setResolutionNote('');
     setAfterPhoto('');
 
-    try {
-      await withTimeout(supabase.from('tickets').update(ticketPayload(next)).eq('id', ticketId));
-    } catch {
-      /* keep local update */
-    }
+    const res = await updateComplaintOnlineFirst({
+      ticket: current,
+      patch,
+      supabaseClient: supabase,
+    });
+    const next = applyTicketLocation(res.ticket, civicSettings);
+    updateOfflineQueueState();
 
     setTickets((prev) => prev.map((t) => (t.id === ticketId ? next : t)));
 
@@ -860,15 +964,17 @@ export default function App() {
     if (!current) return;
     const now = new Date().toISOString();
     const patch = applyCitizenFeedback(current, feedback);
+
+    const res = await updateComplaintOnlineFirst({
+      ticket: current,
+      patch,
+      supabaseClient: supabase,
+    });
     const next = applyTicketLocation(
-      { ...current, ...patch, updated_at: now, status: patch.status || current.status },
+      { ...current, ...patch, ...res.ticket, updated_at: now, status: patch.status || current.status },
       civicSettings
     );
-    try {
-      await withTimeout(supabase.from('tickets').update(ticketPayload(next)).eq('id', ticketId));
-    } catch {
-      /* keep local update */
-    }
+    updateOfflineQueueState();
     setTickets((prev) => prev.map((t) => (t.id === ticketId ? next : t)));
     if (next.satisfaction === 'up') {
       const note = {
@@ -1035,9 +1141,10 @@ export default function App() {
   const maintAlerts = useMemo(() => maintenanceAlerts(tickets, scopeWard), [tickets, scopeWard]);
 
   const nav = [
-    { id: 'home', label: 'Citizen Portal', icon: Home, group: 'Citizen' },
+    { id: 'home', label: 'Citizen Home', icon: Home, group: 'Citizen' },
+    { id: 'citizenDashboard', label: 'Citizen Dashboard', icon: LayoutDashboard, group: 'Citizen' },
     { id: 'report', label: 'Report Issue', icon: FileText, group: 'Citizen' },
-    { id: 'reports', label: 'My Reports', icon: Inbox, group: 'Citizen' },
+    { id: 'reports', label: 'My Complaints', icon: Inbox, group: 'Citizen' },
     { id: 'tracker', label: 'Status Tracker', icon: Radio, group: 'Citizen' },
     { id: 'wardmap', label: 'Ward Map', icon: Layers, group: 'Citizen' },
     { id: 'dashboard', label: 'Officer Dashboard', icon: LayoutDashboard, group: 'Operations' },
@@ -1119,6 +1226,7 @@ export default function App() {
           <strong>UrbanGrid</strong>
         </div>
         <div className="flex items-center gap-2">
+          <ThemeToggle size="sm" />
           <button type="button" className="icon-btn" style={{ width: 36, height: 36 }} onClick={toggleNotifyDrawer} aria-label="Notifications">
             <Bell className="w-4 h-4" />
             {(notification || unreadCount > 0) && <span className="notif-dot" />}
@@ -1152,10 +1260,23 @@ export default function App() {
           />
         </div>
         <div className="topbar-actions">
+          {offlineQueueCount > 0 && (
+            <button
+              type="button"
+              className="chip-btn bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 text-xs font-semibold px-2.5 py-1"
+              onClick={manualSyncQueue}
+              disabled={syncing}
+              title="Click to sync queued items with server"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+              <span>Sync Queue ({offlineQueueCount})</span>
+            </button>
+          )}
           <button type="button" className="chip-btn" aria-label="Current location" onClick={useCurrentLocation}>
             <MapPin className="w-4 h-4" />
             {formData.area || 'Chennai'}
           </button>
+          <ThemeToggle />
           <button type="button" className="icon-btn" onClick={toggleNotifyDrawer} aria-label="Notifications">
             <Bell className="w-4 h-4" />
             {(notification || unreadCount > 0) && <span className="notif-dot" />}
@@ -1812,15 +1933,25 @@ export default function App() {
                   </span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  runOverdueCheck().then(fetchTickets).then(fetchNotifications);
-                }}
-                className="ghost-btn w-fit"
-              >
-                <RefreshCw className="w-3.5 h-3.5" /> Refresh Dispatch
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => exportTicketsToCSV(officerList)}
+                  className="ghost-btn w-fit"
+                  title="Download CSV report of currently filtered complaints"
+                >
+                  <Download className="w-3.5 h-3.5" /> Export Reports (CSV)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    runOverdueCheck().then(fetchTickets).then(fetchNotifications);
+                  }}
+                  className="ghost-btn w-fit"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Refresh Dispatch
+                </button>
+              </div>
             </div>
 
             <div className="kpi-grid sla-kpis">
@@ -1943,6 +2074,13 @@ export default function App() {
                             <p className="text-xs mt-1">Deadline: {formatLongDate(t.response_deadline)}</p>
                             <div className="flex gap-2 mt-3">
                               <button type="button" className="ghost-btn" onClick={() => openTicket(t.id)}>View Issue</button>
+                              <button
+                                type="button"
+                                className="ghost-btn text-amber-700 dark:text-amber-400"
+                                onClick={() => setEditModalTicket(t)}
+                              >
+                                <Edit3 className="w-3.5 h-3.5 mr-1" /> Edit
+                              </button>
                             </div>
                           </div>
                         </article>
@@ -2299,6 +2437,13 @@ export default function App() {
                   >
                     {selected.status === 'Resolved' ? 'Reopen issue' : 'Update status'}
                   </button>
+                  <button
+                    type="button"
+                    className="ghost-btn w-full mt-2"
+                    onClick={() => setEditModalTicket(selected)}
+                  >
+                    <Edit3 className="w-4 h-4 mr-1.5" /> Full Officer Edit (Notes, Priority, Inspection)
+                  </button>
                 </div>
               </div>
             </div>
@@ -2572,6 +2717,20 @@ export default function App() {
           </div>
         )}
 
+        {activeTab === 'citizenDashboard' && (
+          <PublicDashboard
+            user={user}
+            profile={profile}
+            tickets={tickets}
+            civicSettings={civicSettings}
+            offlineQueueCount={offlineQueueCount}
+            onSyncNow={manualSyncQueue}
+            syncing={syncing}
+          />
+        )}
+
+        {activeTab === 'portal' && <AuthPortal />}
+
         {(activeTab === 'login' || activeTab === 'register') && (
           <CitizenAuth mode={activeTab === 'register' ? 'register' : 'login'} />
         )}
@@ -2753,6 +2912,18 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {editModalTicket && (
+        <OfficerEditModal
+          ticket={editModalTicket}
+          isOpen={Boolean(editModalTicket)}
+          onClose={() => setEditModalTicket(null)}
+          onSave={handleOfficerSaveTicket}
+          officerUser={user}
+          officerProfile={profile}
+          isAdmin={isAdmin}
+        />
       )}
     </div>
   );

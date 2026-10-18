@@ -1,0 +1,8 @@
+{
+  "name": "UrbanGrid",
+  "description": "UrbanGrid civic issue reporting with spatial duplicate clustering and municipal dispatch.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
