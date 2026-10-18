@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { supabase } from './supabase/client.js';
+import { supabase, isSupabaseConfigured } from './supabase/client.js';
 import { useAuth } from './auth/session.jsx';
 import RequireOfficer, { RequireAdmin } from './auth/guards.jsx';
 import CitizenAuth from './auth/AuthScreens.jsx';
@@ -502,6 +502,10 @@ export default function App() {
   };
 
   const fetchTickets = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setHydrating(false);
+      return;
+    }
     try {
       const [publicRes, scopedRes] = await withTimeout(
         Promise.all([
@@ -553,7 +557,7 @@ export default function App() {
   // Complaint updates for the signed-in account. Row Level Security returns
   // only the caller's own notifications, so no citizen data crosses accounts.
   const fetchNotifications = useCallback(async () => {
-    if (!user) {
+    if (!user || !isSupabaseConfigured) {
       setUserNotifications([]);
       return;
     }
@@ -579,7 +583,7 @@ export default function App() {
   // run it; the database scopes it to the caller's ward and is the only place
   // sla_status = 'overdue' is persisted.
   const runOverdueCheck = useCallback(async () => {
-    if (!isOfficer) return;
+    if (!isOfficer || !isSupabaseConfigured) return;
     try {
       await withTimeout(supabase.rpc('mark_overdue_tickets'), 4000);
     } catch {
@@ -705,20 +709,22 @@ export default function App() {
     // and priority stay server-controlled. Offline, the local merge below
     // keeps the demo fully functional.
     let serverRow = null;
-    try {
-      const { data, error } = await withTimeout(
-        supabase.rpc('support_complaint', {
-          p_ticket_id: existing.id,
-          p_description: submission.description,
-          p_image_url: submission.image_url,
-          p_latitude: submission.latitude,
-          p_longitude: submission.longitude,
-          p_category: submission.category,
-        })
-      );
-      if (!error && data) serverRow = Array.isArray(data) ? data[0] : data;
-    } catch {
-      /* offline — fall back to the local merge */
+    if (isSupabaseConfigured) {
+      try {
+        const { data, error } = await withTimeout(
+          supabase.rpc('support_complaint', {
+            p_ticket_id: existing.id,
+            p_description: submission.description,
+            p_image_url: submission.image_url,
+            p_latitude: submission.latitude,
+            p_longitude: submission.longitude,
+            p_category: submission.category,
+          })
+        );
+        if (!error && data) serverRow = Array.isArray(data) ? data[0] : data;
+      } catch {
+        /* offline — fall back to the local merge */
+      }
     }
 
     let updated;
@@ -1021,6 +1027,7 @@ export default function App() {
     if (unreadIds.length === 0) return;
     const readAt = new Date().toISOString();
     setUserNotifications((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: readAt })));
+    if (!isSupabaseConfigured) return;
     try {
       await withTimeout(supabase.from('notifications').update({ read_at: readAt }).in('id', unreadIds));
     } catch {
